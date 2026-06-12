@@ -13,12 +13,12 @@ on:
       dry_run:
         description: "Scrape only, do not write to Supabase"
         type: boolean
-        default: false
+        default: true
 
-  schedule:
-    # 9:05 / 9:15 / 9:25 / 9:30 / 9:35 / 9:45pm ET — GitHub may run late
-    - cron: "5,15,25,30,35,45 21 * * *"
-      timezone: America/New_York
+  # Schedule disabled until Supabase is ready — re-enable when you want nightly runs.
+  # schedule:
+  #   - cron: "5,15,25,30,35,45 21 * * *"
+  #     timezone: America/New_York
 
 concurrency:
   group: sorting-data-scrape
