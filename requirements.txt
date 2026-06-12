@@ -1,0 +1,5 @@
+playwright>=1.49.0
+supabase>=2.10.0
+gspread>=6.0.0
+google-auth>=2.36.0
+python-dotenv>=1.0.1

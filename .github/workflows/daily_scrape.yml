@@ -1,0 +1,68 @@
+name: Daily Sorting Data Scrape
+
+on:
+  workflow_dispatch:
+    inputs:
+      subbatch:
+        description: "Optional subbatch override (e.g. NJSUB-202606092100)"
+        required: false
+      machine_id:
+        description: "Optional machine id override"
+        required: false
+        default: "9"
+      dry_run:
+        description: "Scrape only, do not write to Supabase"
+        type: boolean
+        default: false
+
+  schedule:
+    # 9:05 / 9:15 / 9:25 / 9:30 / 9:35 / 9:45pm ET — GitHub may run late
+    - cron: "5,15,25,30,35,45 21 * * *"
+      timezone: America/New_York
+
+concurrency:
+  group: sorting-data-scrape
+  cancel-in-progress: true
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          python -m playwright install chromium --with-deps
+
+      - name: Run scraper
+        env:
+          UNIUNI_USERNAME: ${{ secrets.UNIUNI_USERNAME }}
+          UNIUNI_PASSWORD: ${{ secrets.UNIUNI_PASSWORD }}
+          UNIUNI_URL: https://tools.uniuni.com:8203/
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+          GOOGLE_SHEET_NAME: subbatch sheet
+          GOOGLE_WORKSHEET_NAME: subbatch sheet
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUBBATCH: ${{ github.event.inputs.subbatch }}
+          MACHINE_ID: ${{ github.event.inputs.machine_id || '9' }}
+        run: |
+          ARGS=""
+          if [ -n "${{ github.event.inputs.subbatch }}" ]; then
+            ARGS="$ARGS --subbatch ${{ github.event.inputs.subbatch }}"
+          fi
+          if [ -n "${{ github.event.inputs.machine_id }}" ]; then
+            ARGS="$ARGS --machine-id ${{ github.event.inputs.machine_id }}"
+          fi
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            ARGS="$ARGS --dry-run"
+          fi
+          python -m src.main $ARGS

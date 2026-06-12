@@ -1,0 +1,13 @@
+.env
+local.env
+!.env.example
+*.json
+!package.json
+!package-lock.json
+!.cursor/mcp.json
+__pycache__/
+.venv/
+venv/
+playwright-report/
+test-results/
+.DS_Store
