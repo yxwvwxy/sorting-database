@@ -35,8 +35,8 @@ class Settings:
             google_credentials_json=os.getenv("GOOGLE_CREDENTIALS", "")
             or os.getenv("GOOGLE_SHEETS_CREDENTIALS", ""),
             google_sheet_id=os.getenv("GOOGLE_SHEETS_ID", ""),
-            google_sheet_name=os.getenv("GOOGLE_SHEET_NAME", "subbatch sheet"),
-            google_worksheet_name=os.getenv("GOOGLE_WORKSHEET_NAME", "subbatch sheet"),
+            google_sheet_name=os.getenv("GOOGLE_SHEET_NAME", "subbatch scrape"),
+            google_worksheet_name=os.getenv("GOOGLE_WORKSHEET_NAME", "subbatch scrape"),
             supabase_url=os.environ["SUPABASE_URL"],
             supabase_service_role_key=os.environ["SUPABASE_SERVICE_ROLE_KEY"],
             subbatch_override=(os.getenv("SUBBATCH") or "").strip() or None,

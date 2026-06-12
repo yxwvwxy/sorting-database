@@ -49,8 +49,8 @@ jobs:
           UNIUNI_URL: https://tools.uniuni.com:8203/
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
           GOOGLE_SHEETS_ID: ${{ secrets.GOOGLE_SHEETS_ID }}
-          GOOGLE_SHEET_NAME: Subbatch
-          GOOGLE_WORKSHEET_NAME: subbatch sheet
+          GOOGLE_SHEET_NAME: subbatch scrape
+          GOOGLE_WORKSHEET_NAME: subbatch scrape
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           SUBBATCH: ${{ github.event.inputs.subbatch }}
