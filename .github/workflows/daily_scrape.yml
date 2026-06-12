@@ -48,6 +48,7 @@ jobs:
           UNIUNI_PASSWORD: ${{ secrets.UNIUNI_PASSWORD }}
           UNIUNI_URL: https://tools.uniuni.com:8203/
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+          GOOGLE_SHEETS_ID: ${{ secrets.GOOGLE_SHEETS_ID }}
           GOOGLE_SHEET_NAME: subbatch sheet
           GOOGLE_WORKSHEET_NAME: subbatch sheet
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}

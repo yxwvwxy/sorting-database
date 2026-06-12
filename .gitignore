@@ -5,6 +5,8 @@ local.env
 !package.json
 !package-lock.json
 !.cursor/mcp.json
+google-service-account.json
+credentials.json
 __pycache__/
 .venv/
 venv/

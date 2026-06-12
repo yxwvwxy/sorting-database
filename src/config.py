@@ -17,6 +17,7 @@ class Settings:
     uniuni_password: str
     uniuni_url: str
     google_credentials_json: str
+    google_sheet_id: str
     google_sheet_name: str
     google_worksheet_name: str
     supabase_url: str
@@ -31,7 +32,9 @@ class Settings:
             uniuni_username=os.environ["UNIUNI_USERNAME"],
             uniuni_password=os.environ["UNIUNI_PASSWORD"],
             uniuni_url=os.getenv("UNIUNI_URL", "https://tools.uniuni.com:8203/").rstrip("/") + "/",
-            google_credentials_json=os.getenv("GOOGLE_CREDENTIALS", ""),
+            google_credentials_json=os.getenv("GOOGLE_CREDENTIALS", "")
+            or os.getenv("GOOGLE_SHEETS_CREDENTIALS", ""),
+            google_sheet_id=os.getenv("GOOGLE_SHEETS_ID", ""),
             google_sheet_name=os.getenv("GOOGLE_SHEET_NAME", "subbatch sheet"),
             google_worksheet_name=os.getenv("GOOGLE_WORKSHEET_NAME", "subbatch sheet"),
             supabase_url=os.environ["SUPABASE_URL"],
@@ -61,14 +64,17 @@ def operation_date_et(now: datetime | None = None) -> date:
 
 
 def google_credentials_dict(settings: Settings) -> dict:
-    raw = settings.google_credentials_json.strip()
+    raw = (
+        settings.google_credentials_json.strip()
+        or os.getenv("GOOGLE_SHEETS_CREDENTIALS", "").strip()
+    )
     if not raw:
         creds_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "").strip()
         if creds_path:
             with open(creds_path, encoding="utf-8") as handle:
                 return json.load(handle)
         raise RuntimeError(
-            "Google credentials not configured. Set GOOGLE_CREDENTIALS (JSON string) "
+            "Google credentials not configured. Set GOOGLE_CREDENTIALS (JSON string or file path) "
             "or GOOGLE_APPLICATION_CREDENTIALS (path to JSON file)."
         )
     if raw.startswith("{"):

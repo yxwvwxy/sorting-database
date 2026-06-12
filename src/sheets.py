@@ -32,7 +32,10 @@ def _parse_row_date(value: str) -> date | None:
 
 def fetch_subbatch_for_date(settings: Settings, operation_date: date) -> SubbatchJob:
     client = _client(settings)
-    sheet = client.open(settings.google_sheet_name).worksheet(settings.google_worksheet_name)
+    if settings.google_sheet_id:
+        sheet = client.open_by_key(settings.google_sheet_id).worksheet(settings.google_worksheet_name)
+    else:
+        sheet = client.open(settings.google_sheet_name).worksheet(settings.google_worksheet_name)
     rows = sheet.get_all_values()
     if not rows:
         raise RuntimeError("Google Sheet is empty.")
