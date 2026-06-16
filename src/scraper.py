@@ -7,7 +7,7 @@ import csv
 import io
 import re
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 
 from playwright.sync_api import Page, sync_playwright
 
@@ -30,8 +30,7 @@ FEED_STATION_ORDER = [
 
 @dataclass(frozen=True)
 class HourlyRow:
-    timestamp: datetime
-    hour: int
+    bucket_time: datetime
     hourly_volume: int
     cumulative_volume: int
 
@@ -47,7 +46,6 @@ class ChuteRow:
 class FeedStationRow:
     station_id: int
     volume: int
-    growth_rate: float | None = None
 
 
 @dataclass
@@ -55,7 +53,7 @@ class ScrapeResult:
     hourly: list[HourlyRow] = field(default_factory=list)
     chutes: list[ChuteRow] = field(default_factory=list)
     feed_stations: list[FeedStationRow] = field(default_factory=list)
-    captured_at: datetime = field(default_factory=datetime.utcnow)
+    scraped_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 def _login(page: Page, settings: Settings) -> None:
@@ -90,8 +88,7 @@ def _parse_hourly_csv(href: str) -> list[HourlyRow]:
         timestamp = datetime.strptime(line[0].strip(), "%Y-%m-%d %H:%M:%S")
         hourly.append(
             HourlyRow(
-                timestamp=timestamp,
-                hour=timestamp.hour,
+                bucket_time=timestamp,
                 hourly_volume=int(line[1]),
                 cumulative_volume=int(line[2]),
             )
@@ -148,7 +145,7 @@ def scrape_job(settings: Settings, job: SubbatchJob, *, headless: bool = True) -
                 hourly=_parse_hourly_csv(download_href),
                 chutes=_parse_chutes(page),
                 feed_stations=_parse_feed_stations(page),
-                captured_at=datetime.utcnow(),
+                scraped_at=datetime.now(timezone.utc),
             )
             return result
         finally:

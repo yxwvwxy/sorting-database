@@ -37,15 +37,40 @@ class Settings:
             google_sheet_id=os.getenv("GOOGLE_SHEETS_ID", ""),
             google_sheet_name=os.getenv("GOOGLE_SHEET_NAME", "subbatch scrape"),
             google_worksheet_name=os.getenv("GOOGLE_WORKSHEET_NAME", "subbatch scrape"),
-            supabase_url=os.environ["SUPABASE_URL"],
-            supabase_service_role_key=os.environ["SUPABASE_SERVICE_ROLE_KEY"],
+            supabase_url=os.getenv("SUPABASE_URL", "").strip(),
+            supabase_service_role_key=os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip(),
             subbatch_override=(os.getenv("SUBBATCH") or "").strip() or None,
             machine_id_override=int(machine) if machine else None,
         )
 
 
+def validate_supabase_settings(settings: Settings) -> None:
+    """Fail fast with a clear message when Supabase env vars are missing."""
+    missing = [
+        name
+        for name, value in (
+            ("SUPABASE_URL", settings.supabase_url),
+            ("SUPABASE_SERVICE_ROLE_KEY", settings.supabase_service_role_key),
+        )
+        if not value
+    ]
+    if missing:
+        raise RuntimeError(
+            "Missing Supabase configuration: "
+            + ", ".join(missing)
+            + ". Check GitHub Actions secrets or your local .env file."
+        )
+
+
 @dataclass(frozen=True)
 class SubbatchJob:
+    """One sorting operation day (9pm–9pm ET).
+
+    ``operation_date`` is the sheet date / business day (e.g. Jun 16 batch).
+    ``subbatch`` encodes the prior calendar day creation stamp (e.g.
+    NJSUB-202606152100 for a batch created Jun 15 at 9pm).
+    """
+
     operation_date: date
     subbatch: str
     machine_id: int
@@ -84,13 +109,13 @@ def google_credentials_dict(settings: Settings) -> dict:
 
 
 def enforce_schedule_window() -> None:
-    """Only scheduled GitHub Actions must run during the 9:05–9:50pm ET window."""
+    """Only scheduled GitHub Actions must run during the 9:25–9:55pm ET window."""
     event_name = os.environ.get("GITHUB_EVENT_NAME")
     if event_name != "schedule":
         return
 
     now = datetime.now(ET)
-    if not (now.hour == 21 and 5 <= now.minute <= 50):
+    if not (now.hour == 21 and 25 <= now.minute <= 55):
         raise SystemExit(
-            f"Scheduled run outside 21:05–21:50 ET window (now {now.strftime('%H:%M %Z')})."
+            f"Scheduled run outside 21:25–21:55 ET window (now {now.strftime('%H:%M %Z')})."
         )

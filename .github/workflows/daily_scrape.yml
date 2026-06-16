@@ -13,12 +13,11 @@ on:
       dry_run:
         description: "Scrape only, do not write to Supabase"
         type: boolean
-        default: true
+        default: false
 
-  # Schedule disabled until Supabase is ready — re-enable when you want nightly runs.
-  # schedule:
-  #   - cron: "5,15,25,30,35,45 21 * * *"
-  #     timezone: America/New_York
+  schedule:
+    - cron: "30 21 * * *"
+      timezone: America/New_York
 
 concurrency:
   group: sorting-data-scrape
@@ -41,6 +40,32 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           python -m playwright install chromium --with-deps
+
+      - name: Verify required secrets
+        env:
+          UNIUNI_USERNAME: ${{ secrets.UNIUNI_USERNAME }}
+          UNIUNI_PASSWORD: ${{ secrets.UNIUNI_PASSWORD }}
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+          GOOGLE_SHEETS_ID: ${{ secrets.GOOGLE_SHEETS_ID }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          set -euo pipefail
+          check_secret() {
+            name="$1"
+            value="$2"
+            if [ -z "$value" ]; then
+              echo "FAIL: $name is empty"
+              exit 1
+            fi
+            echo "OK: $name length=${#value}"
+          }
+          check_secret UNIUNI_USERNAME "$UNIUNI_USERNAME"
+          check_secret UNIUNI_PASSWORD "$UNIUNI_PASSWORD"
+          check_secret GOOGLE_CREDENTIALS "$GOOGLE_CREDENTIALS"
+          check_secret GOOGLE_SHEETS_ID "$GOOGLE_SHEETS_ID"
+          check_secret SUPABASE_URL "$SUPABASE_URL"
+          check_secret SUPABASE_SERVICE_ROLE_KEY "$SUPABASE_SERVICE_ROLE_KEY"
 
       - name: Run scraper
         env:

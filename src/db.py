@@ -2,28 +2,21 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from supabase import Client, create_client
 
 from .config import Settings, SubbatchJob
-from .scraper import FeedStationRow, HourlyRow, ScrapeResult
+from .scraper import ScrapeResult
 
 
 def create_supabase_client(settings: Settings) -> Client:
     return create_client(settings.supabase_url, settings.supabase_service_role_key)
 
 
-def save_scrape_result(
-    client: Client,
-    job: SubbatchJob,
-    result: ScrapeResult,
-    *,
-    capture_time: datetime | None = None,
-) -> None:
-    captured = capture_time or result.captured_at
-
+def upsert_subbatch(client: Client, job: SubbatchJob) -> None:
+    """Record the operation-day batch from Google Sheets in Supabase."""
     client.table("subbatch").upsert(
         {
             "subbatch": job.subbatch,
@@ -32,15 +25,35 @@ def save_scrape_result(
         }
     ).execute()
 
+
+def _as_utc_iso(value: datetime) -> str:
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    else:
+        value = value.astimezone(timezone.utc)
+    return value.isoformat()
+
+
+def mark_subbatch_scraped(client: Client, job: SubbatchJob, scraped_at: datetime) -> None:
+    """Set scraped_at after 8203 data is fully persisted."""
+    client.table("subbatch").update({"scraped_at": _as_utc_iso(scraped_at)}).eq(
+        "subbatch", job.subbatch
+    ).execute()
+
+
+def save_scrape_result(
+    client: Client,
+    job: SubbatchJob,
+    result: ScrapeResult,
+) -> None:
     hourly_rows: list[dict[str, Any]] = []
     for row in result.hourly:
         hourly_rows.append(
             {
                 "subbatch_id": job.subbatch,
-                "hour": row.hour,
+                "bucket_time": row.bucket_time.isoformat(sep=" "),
                 "hourly_volume": row.hourly_volume,
                 "cumulative_volume": row.cumulative_volume,
-                "capture_time": captured.isoformat(sep=" "),
             }
         )
     if hourly_rows:
@@ -49,7 +62,6 @@ def save_scrape_result(
     chute_rows = [
         {
             "subbatch_id": job.subbatch,
-            "capture_time": captured.isoformat(sep=" "),
             "chute_id": row.chute_id,
             "volume": row.volume,
         }
@@ -63,10 +75,10 @@ def save_scrape_result(
             "subbatch_id": job.subbatch,
             "station_id": row.station_id,
             "volume": row.volume,
-            "growth_rate": row.growth_rate,
-            "capture_time": captured.isoformat(sep=" "),
         }
         for row in result.feed_stations
     ]
     if feed_rows:
         client.table("feed_station").upsert(feed_rows).execute()
+
+    mark_subbatch_scraped(client, job, result.scraped_at)
