@@ -106,16 +106,3 @@ def google_credentials_dict(settings: Settings) -> dict:
         return json.loads(raw)
     with open(raw, encoding="utf-8") as handle:
         return json.load(handle)
-
-
-def enforce_schedule_window() -> None:
-    """Only scheduled GitHub Actions must run during the 9:25–9:55pm ET window."""
-    event_name = os.environ.get("GITHUB_EVENT_NAME")
-    if event_name != "schedule":
-        return
-
-    now = datetime.now(ET)
-    if not (now.hour == 21 and 25 <= now.minute <= 55):
-        raise SystemExit(
-            f"Scheduled run outside 21:25–21:55 ET window (now {now.strftime('%H:%M %Z')})."
-        )

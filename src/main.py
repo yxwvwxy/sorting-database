@@ -8,7 +8,7 @@ import sys
 
 from dotenv import load_dotenv
 
-from .config import Settings, enforce_schedule_window, operation_date_et, validate_supabase_settings
+from .config import Settings, operation_date_et, validate_supabase_settings
 from .db import create_supabase_client, save_scrape_result, upsert_subbatch
 from .scraper import scrape_job
 from .sheets import resolve_job
@@ -39,7 +39,6 @@ def main(argv: list[str] | None = None) -> int:
 
     load_dotenv("local.env")
     load_dotenv(".env")
-    enforce_schedule_window()
     settings = Settings.from_env()
     operation_date = operation_date_et()
     job = resolve_job(
