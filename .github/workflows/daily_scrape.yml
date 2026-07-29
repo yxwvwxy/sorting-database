@@ -21,7 +21,7 @@ on:
 
 concurrency:
   group: sorting-data-scrape
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   scrape:

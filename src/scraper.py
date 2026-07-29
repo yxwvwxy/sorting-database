@@ -56,12 +56,40 @@ class ScrapeResult:
     scraped_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
+def _login_error_message(page: Page) -> str | None:
+    body = page.locator("body").inner_text(timeout=5_000)
+    if "Login failed" in body:
+        return "UniUni rejected the username/password (Login failed!)."
+    return None
+
+
 def _login(page: Page, settings: Settings) -> None:
     page.goto(settings.uniuni_url, wait_until="networkidle", timeout=120_000)
-    page.get_by_role("textbox", name="Username").fill(settings.uniuni_username)
-    page.get_by_role("textbox", name="Password").fill(settings.uniuni_password)
-    page.get_by_role("button", name="Login").click()
-    page.get_by_role("button", name="Logout").wait_for(timeout=60_000)
+
+    if page.get_by_role("button", name="Logout").count():
+        return
+
+    last_error = "Logout button never appeared after login."
+    for attempt in range(1, 4):
+        page.get_by_role("textbox", name="Username").fill(settings.uniuni_username)
+        page.get_by_role("textbox", name="Password").fill(settings.uniuni_password)
+        page.get_by_role("button", name="Login").click()
+
+        try:
+            page.get_by_role("button", name="Logout").wait_for(timeout=30_000)
+            return
+        except Exception:
+            login_error = _login_error_message(page)
+            last_error = login_error or last_error
+            if attempt < 3:
+                page.wait_for_timeout(3_000)
+                continue
+            break
+
+    raise RuntimeError(
+        f"{last_error} Check UNIUNI_USERNAME and UNIUNI_PASSWORD "
+        "(GitHub Actions secrets or local .env)."
+    )
 
 
 def _submit_query(page: Page, job: SubbatchJob) -> None:

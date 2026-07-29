@@ -29,8 +29,8 @@ class Settings:
     def from_env(cls) -> Settings:
         machine = os.getenv("MACHINE_ID", "9").strip()
         return cls(
-            uniuni_username=os.environ["UNIUNI_USERNAME"],
-            uniuni_password=os.environ["UNIUNI_PASSWORD"],
+            uniuni_username=os.environ["UNIUNI_USERNAME"].strip(),
+            uniuni_password=os.environ["UNIUNI_PASSWORD"].strip(),
             uniuni_url=os.getenv("UNIUNI_URL", "https://tools.uniuni.com:8203/").rstrip("/") + "/",
             google_credentials_json=os.getenv("GOOGLE_CREDENTIALS", "")
             or os.getenv("GOOGLE_SHEETS_CREDENTIALS", ""),
@@ -41,6 +41,24 @@ class Settings:
             supabase_service_role_key=os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip(),
             subbatch_override=(os.getenv("SUBBATCH") or "").strip() or None,
             machine_id_override=int(machine) if machine else None,
+        )
+
+
+def validate_uniuni_login_settings(settings: Settings) -> None:
+    """Fail fast when UniUni username/password are missing."""
+    missing = [
+        name
+        for name, value in (
+            ("UNIUNI_USERNAME", settings.uniuni_username),
+            ("UNIUNI_PASSWORD", settings.uniuni_password),
+        )
+        if not value
+    ]
+    if missing:
+        raise RuntimeError(
+            "Missing UniUni login configuration: "
+            + ", ".join(missing)
+            + ". Check GitHub Actions secrets or your local .env file."
         )
 
 
