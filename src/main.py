@@ -41,6 +41,7 @@ def main(argv: list[str] | None = None) -> int:
     load_dotenv(".env")
     settings = Settings.from_env()
     validate_uniuni_login_settings(settings)
+
     operation_date = operation_date_et()
     job = resolve_job(
         settings,

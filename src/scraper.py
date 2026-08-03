@@ -1,30 +1,32 @@
-"""Playwright scraper for the UniUni production analytics Streamlit app."""
+"""Playwright scraper for UniMap sorting production analysis."""
 
 from __future__ import annotations
 
-import base64
 import csv
 import io
+import os
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
-from playwright.sync_api import Page, sync_playwright
+from playwright.sync_api import Download, Frame, Page, sync_playwright
 
 from .config import Settings, SubbatchJob
 
-DOWNLOAD_LINK_TEXT = "下载图表数据"
+ANALYSIS_URL = "https://dispatch.uniuni.com/sorting-production-analysis"
+QUERY_LOG_PATTERN = re.compile(r"^query log$", re.I)
+DOWNLOAD_CHART_PATTERN = re.compile(r"download chart data", re.I)
 FEED_STATION_ORDER = [
-    "上层供包台1",
-    "上层供包台2",
-    "上层供包台3",
-    "上层供包台4",
-    "上层供包台5",
-    "下层供包台1",
-    "下层供包台2",
-    "下层供包台3",
-    "下层供包台4",
-    "下层供包台5",
+    "Upper station 1",
+    "Upper station 2",
+    "Upper station 3",
+    "Upper station 4",
+    "Upper station 5",
+    "Lower station 1",
+    "Lower station 2",
+    "Lower station 3",
+    "Lower station 4",
+    "Lower station 5",
 ]
 
 
@@ -56,35 +58,116 @@ class ScrapeResult:
     scraped_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
+def _analysis_target(page: Page) -> Page | Frame:
+    """Return the embedded Streamlit frame when present; otherwise the main page."""
+    for frame in page.frames:
+        if re.search(r"8203|streamlit", frame.url, re.I):
+            return frame
+    return page
+
+
+def _is_login_page(page: Page) -> bool:
+    if "/login" in page.url:
+        return True
+    if page.locator('[data-testid="login-microsoft-sso-button"]').count() > 0:
+        return True
+    username = page.get_by_role("textbox", name=re.compile(r"username", re.I))
+    return username.count() > 0 and username.first.is_visible()
+
+
+def _dismiss_portal_dialogs(page: Page) -> None:
+    """Close UniMap release-note dialogs that block clicks."""
+    page.evaluate(
+        """() => {
+          for (const button of document.querySelectorAll('button')) {
+            if (/got it/i.test(button.innerText)) {
+              button.click();
+              return;
+            }
+          }
+        }"""
+    )
+    page.wait_for_timeout(500)
+
+
+def _portal_logged_in(page: Page) -> bool:
+    if _is_login_page(page):
+        return False
+    if _analysis_ready(page):
+        return True
+    if re.search(r"dispatch\.uniuni\.com/(main|sorting-production-analysis)", page.url):
+        return True
+    return "dispatch.uniuni.com" in page.url and "/login" not in page.url
+
+
 def _login_error_message(page: Page) -> str | None:
     body = page.locator("body").inner_text(timeout=5_000)
-    if "Login failed" in body:
+    if re.search(r"login failed", body, re.I):
         return "UniUni rejected the username/password (Login failed!)."
     return None
 
 
-def _login(page: Page, settings: Settings) -> None:
-    page.goto(settings.uniuni_url, wait_until="networkidle", timeout=120_000)
+def _login_inputs(page: Page):
+    username = page.locator(
+        '[data-testid="login-username-input"], input[name="username"], input[autocomplete="username"]'
+    ).first
+    if username.count() == 0 or not username.is_visible():
+        username = page.get_by_role("textbox", name=re.compile(r"username", re.I)).first
 
-    if page.get_by_role("button", name="Logout").count():
+    password = page.locator(
+        '[data-testid="login-password-input"], input[name="password"], input[type="password"]'
+    ).first
+    if password.count() == 0 or not password.is_visible():
+        password = page.get_by_role("textbox", name=re.compile(r"password", re.I)).first
+
+    submit = page.locator('[data-testid="login-submit-button"]').first
+    if submit.count() == 0 or not submit.is_visible():
+        submit = page.get_by_role("button", name=re.compile(r"^login$", re.I)).first
+
+    return username, password, submit
+
+
+def _login_with_credentials(page: Page, settings: Settings) -> None:
+    if _portal_logged_in(page):
         return
 
-    last_error = "Logout button never appeared after login."
+    if "/login" not in page.url:
+        page.goto(settings.uniuni_portal_url, wait_until="domcontentloaded", timeout=60_000)
+
+    _dismiss_portal_dialogs(page)
+    username_input, password_input, login_button = _login_inputs(page)
+
+    if username_input.count() == 0 or password_input.count() == 0 or login_button.count() == 0:
+        raise RuntimeError(
+            "UniMap username/password login form not found. "
+            f"Current url={page.url!r}. Re-run with --headed to inspect the login page."
+        )
+
+    last_error = "UniMap login did not complete."
     for attempt in range(1, 4):
-        page.get_by_role("textbox", name="Username").fill(settings.uniuni_username)
-        page.get_by_role("textbox", name="Password").fill(settings.uniuni_password)
-        page.get_by_role("button", name="Login").click()
+        username_input.fill(settings.uniuni_username)
+        password_input.fill(settings.uniuni_password)
+        login_button.click(force=True)
 
         try:
-            page.get_by_role("button", name="Logout").wait_for(timeout=30_000)
+            page.wait_for_url(
+                re.compile(r"dispatch\.uniuni\.com/(main|sorting-production-analysis)"),
+                timeout=30_000,
+            )
             return
         except Exception:
-            login_error = _login_error_message(page)
-            last_error = login_error or last_error
-            if attempt < 3:
-                page.wait_for_timeout(3_000)
-                continue
+            pass
+
+        page.wait_for_timeout(2_000)
+        if _portal_logged_in(page):
+            return
+
+        login_error = _login_error_message(page)
+        last_error = login_error or last_error
+        if login_error:
             break
+        if attempt < 3:
+            page.wait_for_timeout(3_000)
 
     raise RuntimeError(
         f"{last_error} Check UNIUNI_USERNAME and UNIUNI_PASSWORD "
@@ -92,18 +175,92 @@ def _login(page: Page, settings: Settings) -> None:
     )
 
 
-def _submit_query(page: Page, job: SubbatchJob) -> None:
-    page.get_by_role("textbox", name=re.compile("批次号")).fill(job.subbatch)
-    page.get_by_role("textbox", name=re.compile("机器编号")).fill(str(job.machine_id))
-    page.get_by_role("button", name="查询日志", exact=True).click()
-    page.get_by_role("link", name=DOWNLOAD_LINK_TEXT).wait_for(timeout=120_000)
+def _analysis_ready(page: Page) -> bool:
+    target = _analysis_target(page)
+    if target.locator("input").count() >= 2:
+        return True
+    return target.get_by_role("textbox", name=re.compile(r"批次号|batch numbers", re.I)).count() > 0
 
 
-def _parse_hourly_csv(href: str) -> list[HourlyRow]:
-    if not href.startswith("data:file/csv;base64,"):
-        raise RuntimeError("Unexpected hourly download link format.")
+def _open_sorting_production_analysis(page: Page) -> None:
+    if _analysis_ready(page):
+        _dismiss_portal_dialogs(page)
+        return
 
-    raw = base64.b64decode(href.split(",", 1)[1]).decode("utf-8-sig")
+    page.goto(ANALYSIS_URL, wait_until="domcontentloaded", timeout=60_000)
+    _dismiss_portal_dialogs(page)
+    page.locator("input").first.wait_for(state="visible", timeout=60_000)
+
+
+def _ensure_logged_in_and_open_analysis(page: Page, settings: Settings) -> None:
+    page.goto(ANALYSIS_URL, wait_until="domcontentloaded", timeout=60_000)
+    _dismiss_portal_dialogs(page)
+
+    for _ in range(20):
+        if not _is_login_page(page):
+            break
+        page.wait_for_timeout(500)
+
+    if _is_login_page(page):
+        _login_with_credentials(page, settings)
+        page.goto(ANALYSIS_URL, wait_until="domcontentloaded", timeout=60_000)
+        _dismiss_portal_dialogs(page)
+
+    if _is_login_page(page):
+        raise RuntimeError(
+            "UniMap login did not complete. "
+            f"Current url={page.url!r}. "
+            "Re-run with --headed to verify UNIUNI_USERNAME and UNIUNI_PASSWORD."
+        )
+
+    page.locator("input").first.wait_for(state="visible", timeout=60_000)
+
+
+def _fill_analysis_inputs(target: Page | Frame, job: SubbatchJob) -> None:
+    batch_input = target.get_by_role("textbox", name=re.compile(r"批次号|batch numbers", re.I))
+    machine_input = target.get_by_role("textbox", name=re.compile(r"机器编号|machine numbers", re.I))
+    if batch_input.count() and machine_input.count():
+        batch_input.first.fill(job.subbatch)
+        machine_input.first.fill(str(job.machine_id))
+        return
+
+    inputs = target.locator("input")
+    if inputs.count() < 2:
+        raise RuntimeError("Batch and machine inputs not found on Sorting Production Analysis page.")
+    inputs.nth(0).fill(job.subbatch)
+    inputs.nth(1).fill(str(job.machine_id))
+
+
+def _click_query_log(target: Page | Frame, page: Page) -> None:
+    query_button = target.locator("button").filter(has_text=QUERY_LOG_PATTERN)
+    if query_button.count() == 0:
+        query_button = target.get_by_role("button", name=re.compile(r"查询日志|query log", re.I))
+    if query_button.count() == 0:
+        raise RuntimeError("Query log button not found on Sorting Production Analysis page.")
+
+    _dismiss_portal_dialogs(page)
+    query_button.first.click(force=True)
+
+
+def _submit_query(page: Page, job: SubbatchJob) -> Page | Frame:
+    target = _analysis_target(page)
+    _fill_analysis_inputs(target, job)
+    _click_query_log(target, page)
+    page.get_by_text(re.compile(r"download chart data|下载图表数据", re.I)).wait_for(timeout=120_000)
+    return target
+
+
+def _parse_hourly_timestamp(raw: str, reference_year: int) -> datetime:
+    value = raw.strip()
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
+        try:
+            return datetime.strptime(value, fmt)
+        except ValueError:
+            continue
+    return datetime.strptime(f"{reference_year}-{value}", "%Y-%m-%d %H:%M")
+
+
+def _parse_hourly_csv_text(raw: str, operation_date: date) -> list[HourlyRow]:
     reader = csv.reader(io.StringIO(raw))
     rows = list(reader)
     if len(rows) < 2:
@@ -113,7 +270,7 @@ def _parse_hourly_csv(href: str) -> list[HourlyRow]:
     for line in rows[1:]:
         if len(line) < 3:
             continue
-        timestamp = datetime.strptime(line[0].strip(), "%Y-%m-%d %H:%M:%S")
+        timestamp = _parse_hourly_timestamp(line[0], operation_date.year)
         hourly.append(
             HourlyRow(
                 bucket_time=timestamp,
@@ -126,12 +283,45 @@ def _parse_hourly_csv(href: str) -> list[HourlyRow]:
     return hourly
 
 
-def _parse_chutes(page: Page) -> list[ChuteRow]:
-    raw = page.evaluate(
-        """() => [...document.querySelectorAll('.slot-container')].map(slot => ({
+def _download_hourly_csv(page: Page, operation_date: date) -> list[HourlyRow]:
+    download_button = page.locator("button").filter(has_text=DOWNLOAD_CHART_PATTERN)
+    if download_button.count() == 0:
+        download_link = page.get_by_role("link", name=re.compile(r"下载图表数据|download chart data", re.I))
+        href = download_link.get_attribute("href") if download_link.count() else None
+        if href and href.startswith("data:"):
+            import base64
+
+            csv_text = base64.b64decode(href.split(",", 1)[1]).decode("utf-8-sig")
+            return _parse_hourly_csv_text(csv_text, operation_date)
+        raise RuntimeError("Download chart data control not found.")
+
+    _dismiss_portal_dialogs(page)
+    with page.expect_download(timeout=60_000) as download_info:
+        download_button.first.click(force=True)
+    download: Download = download_info.value
+    csv_text = open(download.path(), encoding="utf-8-sig").read()
+    return _parse_hourly_csv_text(csv_text, operation_date)
+
+
+def _parse_chutes(target: Page | Frame) -> list[ChuteRow]:
+    raw = target.evaluate(
+        """() => {
+          const modern = [];
+          for (const el of document.querySelectorAll('div[title]')) {
+            const chuteText = el.textContent.trim();
+            const volText = el.getAttribute('title');
+            if (!/^\\d+$/.test(chuteText) || !/^\\d+$/.test(volText)) continue;
+            const chute_id = Number(chuteText);
+            const volume = Number(volText);
+            if (chute_id >= 100 && chute_id <= 1100) modern.push({ chute_id, volume });
+          }
+          if (modern.length) return modern;
+
+          return [...document.querySelectorAll('.slot-container')].map(slot => ({
             chute_id: Number(slot.querySelector('.slot-number')?.textContent?.trim() || 0),
             volume: Number(slot.querySelector('.tooltiptext')?.textContent?.trim() || 0),
-        }))"""
+          }));
+        }"""
     )
     chutes = [ChuteRow(chute_id=int(row["chute_id"]), volume=int(row["volume"])) for row in raw if row["chute_id"]]
     if not chutes:
@@ -139,16 +329,29 @@ def _parse_chutes(page: Page) -> list[ChuteRow]:
     return chutes
 
 
-def _parse_feed_stations(page: Page) -> list[FeedStationRow]:
-    metrics = page.locator('[data-testid="stMetric"]')
+def _parse_feed_stations(target: Page | Frame) -> list[FeedStationRow]:
+    metrics = target.locator('[data-testid="stMetric"]')
     label_to_volume: dict[str, int] = {}
-    for metric in metrics.all():
-        label = metric.locator('[data-testid="stMetricLabel"]').inner_text(timeout=5_000).strip()
-        value = metric.locator('[data-testid="stMetricValue"]').inner_text(timeout=5_000).strip()
-        if label not in FEED_STATION_ORDER:
-            continue
-        digits = re.sub(r"[^\d]", "", value)
-        label_to_volume[label] = int(digits) if digits else 0
+    if metrics.count():
+        for metric in metrics.all():
+            label = metric.locator('[data-testid="stMetricLabel"]').inner_text(timeout=5_000).strip()
+            value = metric.locator('[data-testid="stMetricValue"]').inner_text(timeout=5_000).strip()
+            if label not in FEED_STATION_ORDER:
+                continue
+            digits = re.sub(r"[^\d]", "", value)
+            label_to_volume[label] = int(digits) if digits else 0
+    else:
+        parts = [line.strip() for line in target.locator("body").inner_text(timeout=10_000).splitlines()]
+        for idx, label in enumerate(FEED_STATION_ORDER):
+            key = label.lower()
+            for pos, part in enumerate(parts):
+                if part.lower() != key:
+                    continue
+                volume_line = parts[pos + 1] if pos + 1 < len(parts) else ""
+                digits = re.sub(r"[^\d]", "", volume_line)
+                if digits:
+                    label_to_volume[label] = int(digits)
+                break
 
     rows: list[FeedStationRow] = []
     for idx, label in enumerate(FEED_STATION_ORDER, start=1):
@@ -157,24 +360,41 @@ def _parse_feed_stations(page: Page) -> list[FeedStationRow]:
     return rows
 
 
+def _launch_browser(playwright, *, headless: bool):
+    launch_kwargs: dict[str, object] = {"headless": headless}
+    if not headless:
+        launch_kwargs["slow_mo"] = 800
+        try:
+            return playwright.chromium.launch(channel="chrome", **launch_kwargs)
+        except Exception:
+            return playwright.chromium.launch(**launch_kwargs)
+    return playwright.chromium.launch(**launch_kwargs)
+
+
 def scrape_job(settings: Settings, job: SubbatchJob, *, headless: bool = True) -> ScrapeResult:
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=headless)
-        page = browser.new_page()
-        try:
-            _login(page, settings)
-            _submit_query(page, job)
+        browser = _launch_browser(playwright, headless=headless)
+        context_kwargs: dict[str, object] = {"accept_downloads": True}
+        state_path = settings.uniuni_auth_state_path
+        if state_path and os.path.exists(state_path):
+            context_kwargs["storage_state"] = state_path
 
-            download_href = page.get_by_role("link", name=DOWNLOAD_LINK_TEXT).get_attribute("href")
-            if not download_href:
-                raise RuntimeError("Hourly download link missing href.")
+        context = browser.new_context(**context_kwargs)
+        page = context.new_page()
+        try:
+            _ensure_logged_in_and_open_analysis(page, settings)
+            target = _submit_query(page, job)
 
             result = ScrapeResult(
-                hourly=_parse_hourly_csv(download_href),
-                chutes=_parse_chutes(page),
-                feed_stations=_parse_feed_stations(page),
+                hourly=_download_hourly_csv(page, job.operation_date),
+                chutes=_parse_chutes(target),
+                feed_stations=_parse_feed_stations(target),
                 scraped_at=datetime.now(timezone.utc),
             )
             return result
         finally:
+            if state_path:
+                os.makedirs(os.path.dirname(state_path) or ".", exist_ok=True)
+                context.storage_state(path=state_path)
+            context.close()
             browser.close()

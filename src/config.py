@@ -15,7 +15,8 @@ ET = ZoneInfo("America/New_York")
 class Settings:
     uniuni_username: str
     uniuni_password: str
-    uniuni_url: str
+    uniuni_portal_url: str
+    uniuni_auth_state_path: str | None
     google_credentials_json: str
     google_sheet_id: str
     google_sheet_name: str
@@ -28,10 +29,16 @@ class Settings:
     @classmethod
     def from_env(cls) -> Settings:
         machine = os.getenv("MACHINE_ID", "9").strip()
+        auth_state = (os.getenv("UNIUNI_AUTH_STATE_PATH") or ".uniuni-auth-state.json").strip()
+
         return cls(
             uniuni_username=os.environ["UNIUNI_USERNAME"].strip(),
             uniuni_password=os.environ["UNIUNI_PASSWORD"].strip(),
-            uniuni_url=os.getenv("UNIUNI_URL", "https://tools.uniuni.com:8203/").rstrip("/") + "/",
+            uniuni_portal_url=os.getenv(
+                "UNIUNI_PORTAL_URL", "https://dispatch.uniuni.com/login"
+            ).rstrip("/")
+            + "/",
+            uniuni_auth_state_path=auth_state or None,
             google_credentials_json=os.getenv("GOOGLE_CREDENTIALS", "")
             or os.getenv("GOOGLE_SHEETS_CREDENTIALS", ""),
             google_sheet_id=os.getenv("GOOGLE_SHEETS_ID", ""),
@@ -45,7 +52,7 @@ class Settings:
 
 
 def validate_uniuni_login_settings(settings: Settings) -> None:
-    """Fail fast when UniUni username/password are missing."""
+    """Fail fast when UniMap username/password are missing."""
     missing = [
         name
         for name, value in (
@@ -56,7 +63,7 @@ def validate_uniuni_login_settings(settings: Settings) -> None:
     ]
     if missing:
         raise RuntimeError(
-            "Missing UniUni login configuration: "
+            "Missing UniMap login configuration: "
             + ", ".join(missing)
             + ". Check GitHub Actions secrets or your local .env file."
         )

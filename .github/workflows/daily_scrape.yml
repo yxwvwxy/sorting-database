@@ -71,7 +71,7 @@ jobs:
         env:
           UNIUNI_USERNAME: ${{ secrets.UNIUNI_USERNAME }}
           UNIUNI_PASSWORD: ${{ secrets.UNIUNI_PASSWORD }}
-          UNIUNI_URL: https://tools.uniuni.com:8203/
+          UNIUNI_PORTAL_URL: https://dispatch.uniuni.com/login
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
           GOOGLE_SHEETS_ID: ${{ secrets.GOOGLE_SHEETS_ID }}
           GOOGLE_SHEET_NAME: subbatch scrape

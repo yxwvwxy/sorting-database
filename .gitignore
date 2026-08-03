@@ -5,6 +5,7 @@ local.env
 !package.json
 !package-lock.json
 !.cursor/mcp.json
+.uniuni-auth-state.json
 google-service-account.json
 credentials.json
 __pycache__/
