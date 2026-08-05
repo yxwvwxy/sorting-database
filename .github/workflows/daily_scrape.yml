@@ -15,9 +15,8 @@ on:
         type: boolean
         default: false
 
-  schedule:
-    - cron: "30 21 * * *"
-      timezone: America/New_York
+  # Local Windows Task Scheduler owns the every-20-minute cadence.
+  # Keep workflow_dispatch for emergency backfills only.
 
 concurrency:
   group: sorting-data-scrape

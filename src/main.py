@@ -8,10 +8,10 @@ import sys
 
 from dotenv import load_dotenv
 
-from .config import Settings, operation_date_et, validate_supabase_settings, validate_uniuni_login_settings
-from .db import create_supabase_client, save_scrape_result, upsert_subbatch
+from .batch_resolve import resolve_job
+from .config import Settings, validate_supabase_settings, validate_uniuni_login_settings
+from .db import create_supabase_client, save_scrape_result
 from .scraper import scrape_job
-from .sheets import resolve_job
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -28,12 +28,22 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--subbatch",
-        help="Override subbatch (skips Google Sheet lookup).",
+        help="Override subbatch (skips Slot Assignment / saved batch).",
     )
     parser.add_argument(
         "--machine-id",
         type=int,
         help="Override machine id (default 9).",
+    )
+    parser.add_argument(
+        "--refresh-batch",
+        action="store_true",
+        help="Force Slot Assignment Batch No refresh (normally only at 21:30 ET).",
+    )
+    parser.add_argument(
+        "--use-sheet",
+        action="store_true",
+        help="Resolve batch from Google Sheet instead of Slot Assignment / saved batch.",
     )
     args = parser.parse_args(argv)
 
@@ -42,26 +52,17 @@ def main(argv: list[str] | None = None) -> int:
     settings = Settings.from_env()
     validate_uniuni_login_settings(settings)
 
-    operation_date = operation_date_et()
     job = resolve_job(
         settings,
-        operation_date,
         subbatch_override=args.subbatch,
         machine_id_override=args.machine_id,
+        use_sheet=args.use_sheet,
+        refresh_batch=args.refresh_batch,
+        headless=not args.headed,
     )
 
     print(f"Operation date: {job.operation_date}")
     print(f"Subbatch: {job.subbatch} | Machine: {job.machine_id}")
-
-    client = None
-    if not args.dry_run:
-        validate_supabase_settings(settings)
-        client = create_supabase_client(settings)
-        upsert_subbatch(client, job)
-        print(
-            f"Saved subbatch to Supabase: {job.subbatch} "
-            f"(operation date {job.operation_date}, machine {job.machine_id})."
-        )
 
     result = scrape_job(settings, job, headless=not args.headed)
 
@@ -91,8 +92,10 @@ def main(argv: list[str] | None = None) -> int:
         print("Dry run complete — no Supabase writes.")
         return 0
 
+    validate_supabase_settings(settings)
+    client = create_supabase_client(settings)
     save_scrape_result(client, job, result)
-    print(f"Saved scrape result to Supabase (scraped_at={result.scraped_at.isoformat()}).")
+    print(f"Saved scrape snapshot to Supabase (scraped_at={result.scraped_at.isoformat()}).")
     return 0
 
 

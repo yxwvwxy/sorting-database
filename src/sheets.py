@@ -1,4 +1,4 @@
-"""Read subbatch rows from Google Sheets (gspread + service account)."""
+"""Optional Google Sheets helpers (emergency --use-sheet only)."""
 
 from __future__ import annotations
 
@@ -55,21 +55,3 @@ def fetch_subbatch_for_date(settings: Settings, operation_date: date) -> Subbatc
         )
 
     raise RuntimeError(f"No subbatch row found for operation date {target}.")
-
-
-def resolve_job(
-    settings: Settings,
-    operation_date: date,
-    *,
-    subbatch_override: str | None = None,
-    machine_id_override: int | None = None,
-) -> SubbatchJob:
-    subbatch = subbatch_override or settings.subbatch_override
-    machine_id = machine_id_override if machine_id_override is not None else settings.machine_id_override
-    if subbatch:
-        return SubbatchJob(
-            operation_date=operation_date,
-            subbatch=subbatch,
-            machine_id=machine_id or 9,
-        )
-    return fetch_subbatch_for_date(settings, operation_date)

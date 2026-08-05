@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 ET = ZoneInfo("America/New_York")
+SUBBATCH_PATTERN = re.compile(r"^NJSUB-(\d{8})2100$", re.I)
 
 
 @dataclass(frozen=True)
@@ -91,9 +93,9 @@ def validate_supabase_settings(settings: Settings) -> None:
 class SubbatchJob:
     """One sorting operation day (9pm–9pm ET).
 
-    ``operation_date`` is the sheet date / business day (e.g. Jun 16 batch).
-    ``subbatch`` encodes the prior calendar day creation stamp (e.g.
-    NJSUB-202606152100 for a batch created Jun 15 at 9pm).
+    ``operation_date`` is the business day (stamp date + 1).
+    ``subbatch`` encodes the creation stamp at 9pm ET
+    (e.g. NJSUB-202606152100 for a batch created Jun 15 at 9pm).
     """
 
     operation_date: date
@@ -101,16 +103,58 @@ class SubbatchJob:
     machine_id: int
 
 
-def operation_date_et(now: datetime | None = None) -> date:
-    """Return the operation date in US/Eastern.
-
-    Runs between midnight and 8:59am ET are attributed to the previous calendar day
-    so a delayed GitHub Action still targets the correct operation day.
-    """
+def _as_eastern(now: datetime | None = None) -> datetime:
     current = now or datetime.now(ET)
-    if current.hour < 9:
-        return (current - timedelta(days=1)).date()
-    return current.date()
+    if current.tzinfo is None:
+        return current.replace(tzinfo=ET)
+    return current.astimezone(ET)
+
+
+def operation_date_et(now: datetime | None = None) -> date:
+    """Return the operation date for the active 9pm–9pm ET window.
+
+    Switch to the new batch at 21:30 ET (first :30 scrape of the new window).
+    The 21:10 scrape still belongs to the previous batch.
+    """
+    return current_subbatch_job(now=now).operation_date
+
+
+def operation_date_from_subbatch(subbatch: str) -> date:
+    """Derive operation date from NJSUB-YYYYMMDD2100 (stamp day + 1)."""
+    match = SUBBATCH_PATTERN.match(subbatch.strip())
+    if not match:
+        raise RuntimeError(
+            f"Cannot parse operation date from subbatch {subbatch!r}. "
+            "Expected NJSUB-YYYYMMDD2100."
+        )
+    stamp = datetime.strptime(match.group(1), "%Y%m%d").date()
+    return stamp + timedelta(days=1)
+
+
+def current_subbatch_job(
+    now: datetime | None = None,
+    *,
+    machine_id: int = 9,
+) -> SubbatchJob:
+    """Resolve the active batch from Eastern clock (no Google Sheet).
+
+    Schedule alignment:
+    - 21:10 ET → last scrape of the batch created the previous calendar day at 21:00
+    - 21:30 ET → first scrape of the batch created today at 21:00
+    """
+    current = _as_eastern(now)
+    if current.hour > 21 or (current.hour == 21 and current.minute >= 30):
+        stamp_date = current.date()
+    else:
+        stamp_date = current.date() - timedelta(days=1)
+
+    operation_date = stamp_date + timedelta(days=1)
+    subbatch = f"NJSUB-{stamp_date.strftime('%Y%m%d')}2100"
+    return SubbatchJob(
+        operation_date=operation_date,
+        subbatch=subbatch,
+        machine_id=machine_id,
+    )
 
 
 def google_credentials_dict(settings: Settings) -> dict:
