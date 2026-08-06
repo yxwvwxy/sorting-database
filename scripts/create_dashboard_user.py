@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -11,6 +12,10 @@ from supabase import create_client
 
 ROOT = Path(__file__).resolve().parents[1]
 USERNAME_DOMAIN = "sorting-db.local"
+
+
+def normalize_username(username: str) -> str:
+    return re.sub(r"\s+", ".", username.strip().lower())
 
 
 def main() -> int:
@@ -30,18 +35,21 @@ def main() -> int:
         return 1
 
     if args.username:
-        username = args.username.strip()
-        if not username or "@" in username:
+        display = args.username.strip()
+        if not display or "@" in display:
             print("Username must be non-empty and must not contain @", file=sys.stderr)
             return 1
-        email = f"{username}@{USERNAME_DOMAIN}"
-        display = username
+        local = normalize_username(display)
+        if not local:
+            print("Username is empty after normalization", file=sys.stderr)
+            return 1
+        email = f"{local}@{USERNAME_DOMAIN}"
     else:
         email = args.email.strip()
         display = email
 
     sb = create_client(url, key)
-    user = sb.auth.admin.create_user(
+    sb.auth.admin.create_user(
         {
             "email": email,
             "password": args.password,

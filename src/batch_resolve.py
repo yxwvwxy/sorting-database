@@ -12,6 +12,7 @@ operation date (window start day + 1), even if the ID digits are unusual
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta
+from typing import TYPE_CHECKING
 
 from .batch_state import BatchState, load_batch_state, save_batch_state
 from .config import (
@@ -23,6 +24,9 @@ from .config import (
 )
 from .sheets import fetch_subbatch_for_date
 from .slot_assignment import fetch_batch_from_slot_assignment
+
+if TYPE_CHECKING:
+    from .session import UniUniSession
 
 
 def switch_window_operation_date(now: datetime | None = None) -> date:
@@ -72,6 +76,7 @@ def resolve_job(
     refresh_batch: bool = False,
     headless: bool = True,
     now: datetime | None = None,
+    session: "UniUniSession | None" = None,
 ) -> SubbatchJob:
     machine_id = (
         machine_id_override
@@ -101,6 +106,11 @@ def resolve_job(
             state=state,
             headless=headless,
             now=now,
+            session=session,
+            # Mid-day --refresh-batch adopts the live Batch No; do not enter
+            # the 21:30 switch-waiting state (that would poll every later run).
+            adopt_page_batch=refresh_batch
+            and not should_poll_slot_assignment(now, state=None),
         )
 
     if state:
@@ -127,6 +137,8 @@ def _resolve_from_slot_assignment(
     state: BatchState | None,
     headless: bool,
     now: datetime | None,
+    adopt_page_batch: bool = False,
+    session: "UniUniSession | None" = None,
 ) -> SubbatchJob:
     previous = state.job.subbatch if state else None
     previous_ops = state.job.operation_date if state else None
@@ -137,17 +149,39 @@ def _resolve_from_slot_assignment(
         else switch_window_operation_date(now)
     )
 
+    if session is not None:
+        page_job = session.fetch_batch(machine_id=machine_id)
+    else:
+        page_job = fetch_batch_from_slot_assignment(
+            settings,
+            machine_id=machine_id,
+            headless=headless,
+        )
+    page_batch = page_job.subbatch
+
+    # Forced mid-day refresh: page Batch No is the batch in use right now.
+    if adopt_page_batch:
+        job = SubbatchJob(
+            operation_date=operation_date_from_subbatch(page_batch),
+            subbatch=page_batch,
+            machine_id=machine_id,
+        )
+        save_batch_state(
+            job,
+            source="slot_assignment_refresh",
+            awaiting_from=None,
+            window_operation_date=None,
+        )
+        print(
+            f"Refreshed current batch from Slot Assignment: {job.subbatch} "
+            f"(operation date {job.operation_date})"
+        )
+        return job
+
     # First poll of this evening window: lock the pre-switch batch + ops day.
     if previous and not awaiting_from:
         awaiting_from = previous
         window_ops = switch_window_operation_date(now)
-
-    page_job = fetch_batch_from_slot_assignment(
-        settings,
-        machine_id=machine_id,
-        headless=headless,
-    )
-    page_batch = page_job.subbatch
 
     # Page shows a different Batch No than before the window → switch complete.
     if awaiting_from and page_batch != awaiting_from:

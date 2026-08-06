@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 from .batch_resolve import resolve_job
 from .config import Settings, validate_supabase_settings, validate_uniuni_login_settings
 from .db import create_supabase_client, save_scrape_result
-from .scraper import scrape_job
+from .session import open_uniuni_session
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -52,19 +52,23 @@ def main(argv: list[str] | None = None) -> int:
     settings = Settings.from_env()
     validate_uniuni_login_settings(settings)
 
-    job = resolve_job(
-        settings,
-        subbatch_override=args.subbatch,
-        machine_id_override=args.machine_id,
-        use_sheet=args.use_sheet,
-        refresh_batch=args.refresh_batch,
-        headless=not args.headed,
-    )
+    # One browser for the whole run: reuse nj600 session; if Slot Assignment is
+    # needed first, navigate that same session to Sorting Production Analysis.
+    with open_uniuni_session(settings, headless=not args.headed) as session:
+        job = resolve_job(
+            settings,
+            subbatch_override=args.subbatch,
+            machine_id_override=args.machine_id,
+            use_sheet=args.use_sheet,
+            refresh_batch=args.refresh_batch,
+            headless=not args.headed,
+            session=session,
+        )
 
-    print(f"Operation date: {job.operation_date}")
-    print(f"Subbatch: {job.subbatch} | Machine: {job.machine_id}")
+        print(f"Operation date: {job.operation_date}")
+        print(f"Subbatch: {job.subbatch} | Machine: {job.machine_id}")
 
-    result = scrape_job(settings, job, headless=not args.headed)
+        result = session.scrape(job)
 
     summary = {
         "operation_date": job.operation_date.isoformat(),

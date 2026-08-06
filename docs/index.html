@@ -2,8 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <meta http-equiv="Cache-Control" content="no-store" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Sorting Database · City Flow</title>
+  <title>Sorting Database</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Outfit:wght@400;600;700&display=swap" rel="stylesheet" />
@@ -31,7 +32,7 @@
         linear-gradient(165deg, var(--bg0) 0%, var(--bg1) 48%, #0e151c 100%);
     }
     main {
-      width: min(1120px, calc(100% - 2rem));
+      width: min(1180px, calc(100% - 2rem));
       margin: 0 auto;
       padding: 2rem 0 3rem;
     }
@@ -41,14 +42,10 @@
       font-weight: 700;
       letter-spacing: -0.02em;
       line-height: 1.05;
-      background: linear-gradient(120deg, #fff6e0 0%, var(--amber) 42%, var(--mint) 100%);
-      -webkit-background-clip: text;
-      background-clip: text;
-      color: transparent;
+      color: var(--amber);
     }
     .lede {
-      margin: 0.5rem 0 1.25rem;
-      max-width: 40rem;
+      margin: 0.5rem 0 0;
       color: var(--muted);
       font-size: 1.05rem;
     }
@@ -77,14 +74,25 @@
     input { width: 100%; min-width: 0; }
     button {
       cursor: pointer;
-      background: linear-gradient(120deg, rgba(240,162,2,0.25), rgba(61,220,151,0.18));
-      border-color: rgba(240,162,2,0.35);
+      background: var(--amber);
+      border-color: var(--amber);
+      color: #1a1200;
+      font-weight: 600;
       min-width: auto;
     }
-    button:hover { border-color: var(--amber); }
+    button:hover { filter: brightness(1.06); }
     button.ghost {
       background: transparent;
       border-color: var(--line);
+      color: var(--ink);
+      font-weight: 400;
+      filter: none;
+    }
+    button.ghost:hover { border-color: var(--amber); filter: none; }
+    #reload, #feed-reload {
+      background: var(--amber);
+      border-color: var(--amber);
+      color: #1a1200;
     }
     .meta {
       display: flex;
@@ -150,14 +158,15 @@
       font-family: "IBM Plex Mono", monospace;
       font-size: 0.85rem;
     }
-    #chart { width: 100%; height: 460px; }
+    #chart, #feed-chart { width: 100%; height: 460px; }
     .hidden { display: none !important; }
     .topbar {
       display: flex;
       justify-content: space-between;
-      align-items: flex-start;
+      align-items: center;
       gap: 1rem;
       flex-wrap: wrap;
+      margin-bottom: 1.25rem;
     }
     .userchip {
       font-family: "IBM Plex Mono", monospace;
@@ -189,13 +198,116 @@
       margin-top: 1.1rem;
     }
     .login-card button[type="submit"] { width: 100%; padding: 0.7rem; }
+    .section {
+      margin-top: 2rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--line);
+    }
+    .section:first-of-type {
+      margin-top: 0;
+      padding-top: 0;
+      border-top: 0;
+    }
+    .deck-block { margin-bottom: 1rem; }
+    .deck-label {
+      margin: 0 0 0.55rem;
+      font-size: 0.85rem;
+      color: var(--muted);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .station-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 0.65rem;
+    }
+    @media (max-width: 900px) {
+      .station-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    .station-card {
+      border: 1px solid var(--line);
+      background: rgba(0,0,0,0.22);
+      padding: 0.85rem 0.9rem;
+    }
+    .station-card .name {
+      font-size: 0.82rem;
+      color: #d7e0d9;
+      margin-bottom: 0.35rem;
+    }
+    .station-card .pcs {
+      font-size: 1.35rem;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+    .station-card .pcs span {
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--muted);
+      margin-left: 0.25rem;
+    }
+    .station-card .pct {
+      margin-top: 0.25rem;
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 0.85rem;
+      color: var(--mint);
+    }
+    .feed-chart-wrap {
+      display: grid;
+      grid-template-columns: 1fr 140px;
+      gap: 0.75rem;
+      align-items: stretch;
+    }
+    @media (max-width: 800px) {
+      .feed-chart-wrap { grid-template-columns: 1fr; }
+    }
+    .hour-axis {
+      border: 1px solid var(--line);
+      background: rgba(0,0,0,0.18);
+      padding: 0.6rem 0.45rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+      max-height: 460px;
+      overflow: auto;
+    }
+    .hour-axis .axis-title {
+      font-size: 0.72rem;
+      color: var(--muted);
+      text-align: center;
+      margin-bottom: 0.25rem;
+    }
+    .hour-btn {
+      width: 100%;
+      min-width: 0;
+      padding: 0.4rem 0.35rem;
+      font-size: 0.72rem;
+      font-family: "IBM Plex Mono", monospace;
+      font-weight: 500;
+      background: transparent;
+      border: 1px solid var(--line);
+      color: #d7e0d9;
+    }
+    .hour-btn.active {
+      border-color: var(--amber);
+      color: var(--amber);
+      background: rgba(240,162,2,0.12);
+    }
+    .stack-detail {
+      margin: 0.75rem 0 0;
+      padding: 0.75rem 0.9rem;
+      border: 1px solid rgba(240,162,2,0.35);
+      background: rgba(240,162,2,0.08);
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 0.85rem;
+      white-space: pre-line;
+    }
   </style>
 </head>
 <body>
   <div id="login-view">
     <div class="login-card">
       <h1 class="brand">Sorting Database</h1>
-      <p class="lede" style="margin-bottom:0">Sign in to view city / hub flow.</p>
+      <p class="lede">Sign in to view sorting dashboards.</p>
       <form id="login-form">
         <label>Username
           <input id="username" type="text" autocomplete="username" required />
@@ -211,55 +323,68 @@
 
   <main id="app-view" class="hidden">
     <div class="topbar">
-      <div>
-        <h1 class="brand">Sorting Database</h1>
-        <p class="lede">
-          City / hub flow from 20-minute chute snapshots.
-          <code>last_mile</code> uses city; <code>transit</code> uses warehouse.
-          Increments = this scrape − previous.
-        </p>
-      </div>
+      <h1 class="brand">Sorting Database</h1>
       <div class="userchip">
         <span id="user-email"></span>
         <button id="logout" type="button" class="ghost">Sign out</button>
       </div>
     </div>
 
-    <div class="controls">
-      <label>Batch / ops day
-        <select id="batch"></select>
-      </label>
-      <label>Chart metric
-        <select id="metric">
-          <option value="total">Cumulative total</option>
-          <option value="delta">20-min increment</option>
-        </select>
-      </label>
-      <label>Top N on chart
-        <select id="topn">
-          <option>10</option>
-          <option selected>15</option>
-          <option>20</option>
-          <option>30</option>
-        </select>
-      </label>
-      <label>&nbsp;
-        <button id="reload" type="button">Refresh</button>
-      </label>
-    </div>
-
-    <div id="meta" class="meta"></div>
-    <p id="error" class="error hidden"></p>
-
-    <section>
+    <section id="city-section" class="section hidden">
       <h2>City / hub growth</h2>
+      <div class="controls">
+        <label>Batch / ops day
+          <select id="batch"></select>
+        </label>
+        <label>Chart metric
+          <select id="metric">
+            <option value="total">Cumulative total</option>
+            <option value="delta">20-min increment</option>
+          </select>
+        </label>
+        <label>&nbsp;
+          <button id="reload" type="button">Refresh</button>
+        </label>
+      </div>
+      <div id="meta" class="meta"></div>
+      <p id="error" class="error hidden"></p>
       <div class="panel"><div id="chart"></div></div>
-    </section>
-
-    <section>
       <h2>Latest city / hub totals</h2>
       <p class="caption">Sorted by current cumulative volume. Delta is the latest 20-minute change.</p>
       <div id="tiles" class="grid"></div>
+    </section>
+
+    <section id="feed-section" class="section hidden">
+      <h2>Feed station hourly</h2>
+      <div class="controls">
+        <label>Batch / ops day
+          <select id="feed-batch"></select>
+        </label>
+        <label>&nbsp;
+          <button id="feed-reload" type="button">Refresh</button>
+        </label>
+      </div>
+      <div id="feed-meta" class="meta"></div>
+      <p id="feed-error" class="error hidden"></p>
+
+      <div class="deck-block">
+        <p class="deck-label">Upper deck</p>
+        <div id="upper-cards" class="station-grid"></div>
+      </div>
+      <div class="deck-block">
+        <p class="deck-label">Lower deck</p>
+        <div id="lower-cards" class="station-grid"></div>
+      </div>
+
+      <p class="caption">Stacked bars = hourly increment (:30 → next :30 ET). Click a stack for details. Click a time on the right to set the stack baseline; click chart blank space to reset to the first :30.</p>
+      <div class="feed-chart-wrap">
+        <div class="panel"><div id="feed-chart"></div></div>
+        <div class="hour-axis">
+          <div class="axis-title">Hour start (ET)</div>
+          <div id="hour-buttons"></div>
+        </div>
+      </div>
+      <p id="stack-detail" class="stack-detail hidden"></p>
     </section>
   </main>
 
@@ -268,28 +393,104 @@
     const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhsbGltbWd4a3R0anphaWtpbXR1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc0ODkwODcsImV4cCI6MjA5MzA2NTA4N30.ULSAIUVpnnCIPUYexpdUh6dxYe40e9LHSmG-7QcAZL0";
     const USERNAME_DOMAIN = "sorting-db.local";
     const COLORS = ["#F0A202","#3DDC97","#4CC9F0","#F72585","#B8F2E6","#FF6B35","#7BDFF2","#F9C74F","#90BE6D","#577590","#F8961E","#43AA8B","#F94144","#277DA1","#F3722C"];
+    const STATION_ORDER = [
+      "Upper station 1","Upper station 2","Upper station 3","Upper station 4","Upper station 5",
+      "Lower station 1","Lower station 2","Lower station 3","Lower station 4","Lower station 5",
+    ];
 
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     const $ = (id) => document.getElementById(id);
     const fmt = (n) => Number(n || 0).toLocaleString("en-US");
 
-    function toAuthEmail(username) {
-      const value = String(username || "").trim();
-      return value.includes("@") ? value : `${value}@${USERNAME_DOMAIN}`;
+    let roles = [];
+    let batches = [];
+    let feedBatches = [];
+    let feedHours = []; // {startMs, endMs, label, shortLabel}
+    let feedHourly = []; // {station, startMs, endMs, label, delta, endVolume}
+    let feedLatest = []; // {station, volume}
+    let baselineStartMs = null;
+    let feedPlotReady = false;
+
+    function normalizeUsername(username) {
+      return String(username || "").trim().toLowerCase().replace(/\s+/g, ".");
     }
 
-    function displayName(email) {
-      if (!email) return "";
+    function toAuthEmail(username) {
+      const value = String(username || "").trim();
+      if (value.includes("@")) return value;
+      return `${normalizeUsername(value)}@${USERNAME_DOMAIN}`;
+    }
+
+    function displayName(user) {
+      const meta = user?.user_metadata?.username;
+      if (meta) return meta;
+      const email = user?.email || "";
       const suffix = `@${USERNAME_DOMAIN}`;
-      return email.endsWith(suffix) ? email.slice(0, -suffix.length) : email;
+      if (email.endsWith(suffix)) return email.slice(0, -suffix.length).replace(/\./g, " ");
+      return email;
+    }
+
+    function userRoles(user) {
+      const raw = user?.app_metadata?.roles;
+      if (Array.isArray(raw) && raw.length) return raw.map(String);
+      // default: legacy email users get city+feed; username users need explicit roles
+      if ((user?.email || "").endsWith(`@${USERNAME_DOMAIN}`)) return ["feed"];
+      return ["city", "feed"];
+    }
+
+    function hasRole(name) {
+      return roles.includes(name);
+    }
+
+    function etParts(iso, opts) {
+      return new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", ...opts })
+        .formatToParts(new Date(iso))
+        .reduce((acc, p) => {
+          if (p.type !== "literal") acc[p.type] = p.value;
+          return acc;
+        }, {});
     }
 
     function toEt(iso) {
-      return new Date(iso).toLocaleString("en-US", {
-        timeZone: "America/New_York",
+      const p = etParts(iso, {
         year: "numeric", month: "2-digit", day: "2-digit",
         hour: "2-digit", minute: "2-digit", hour12: false,
-      }) + " ET";
+      });
+      return `${p.month}/${p.day}/${p.year} ${p.hour}:${p.minute} ET`;
+    }
+
+    function toEtPlotTime(iso) {
+      const p = etParts(iso, {
+        year: "numeric", month: "2-digit", day: "2-digit",
+        hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+      });
+      return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:${p.second}`;
+    }
+
+    function etTodayYmd() {
+      const p = etParts(new Date().toISOString(), {
+        year: "numeric", month: "2-digit", day: "2-digit",
+      });
+      return `${p.year}-${p.month}-${p.day}`;
+    }
+
+    function etDaysAgoYmd(days) {
+      const [y, m, d] = etTodayYmd().split("-").map(Number);
+      const dt = new Date(Date.UTC(y, m - 1, d));
+      dt.setUTCDate(dt.getUTCDate() - days);
+      return dt.toISOString().slice(0, 10);
+    }
+
+    function formatHour12(iso) {
+      const p = etParts(iso, { hour: "numeric", minute: "2-digit", hour12: true });
+      const hour = String(p.hour);
+      const minute = p.minute;
+      const dayPeriod = String(p.dayPeriod || "").toLowerCase();
+      return `${hour}:${minute}${dayPeriod}`;
+    }
+
+    function hourRangeLabel(startIso, endIso) {
+      return `${formatHour12(startIso)}-${formatHour12(endIso)}`;
     }
 
     async function rpc(name, args = {}) {
@@ -298,29 +499,29 @@
       return data || [];
     }
 
-    function showError(err) {
-      const el = $("error");
+    function showError(elId, err) {
+      const el = $(elId);
       el.classList.toggle("hidden", !err);
       el.textContent = err ? String(err.message || err) : "";
     }
 
     function showLoginError(err) {
-      const el = $("login-error");
-      el.classList.toggle("hidden", !err);
-      el.textContent = err ? String(err.message || err) : "";
+      showError("login-error", err);
     }
 
     function setAuthed(session) {
       const authed = Boolean(session);
       $("login-view").classList.toggle("hidden", authed);
       $("app-view").classList.toggle("hidden", !authed);
-      if (authed) {
-        $("user-email").textContent = displayName(session.user?.email || "");
-      }
+      if (!authed) return;
+      $("user-email").textContent = displayName(session.user);
+      roles = userRoles(session.user);
+      $("city-section").classList.toggle("hidden", !hasRole("city"));
+      $("feed-section").classList.toggle("hidden", !hasRole("feed"));
     }
 
-    function renderMeta(batch) {
-      $("meta").innerHTML = `
+    function renderMeta(batch, elId) {
+      $(elId).innerHTML = `
         <span>ops day <strong>${batch.subbatch_date}</strong></span>
         <span>batch <strong>${batch.subbatch}</strong></span>
         <span>snaps <strong>${batch.scrape_count}</strong></span>
@@ -340,9 +541,9 @@
       }).join("");
     }
 
-    function renderChart(series, topCities, metric) {
+    function renderChart(series, cities, metric) {
       const yKey = metric === "delta" ? "delta_volume" : "total_volume";
-      const traces = topCities.map((city, i) => {
+      const traces = cities.map((city, i) => {
         const rows = series
           .filter((r) => r.city === city)
           .sort((a, b) => new Date(a.scraped_at) - new Date(b.scraped_at));
@@ -350,10 +551,11 @@
           type: "scatter",
           mode: "lines+markers",
           name: city,
-          x: rows.map((r) => r.scraped_at),
+          x: rows.map((r) => toEtPlotTime(r.scraped_at)),
           y: rows.map((r) => r[yKey]),
           line: { width: 2.4, color: COLORS[i % COLORS.length] },
           marker: { size: 7 },
+          hovertemplate: `%{x} ET<br>${city}: %{y:,}<extra></extra>`,
         };
       });
       Plotly.newPlot("chart", traces, {
@@ -363,7 +565,9 @@
         font: { family: "Outfit, sans-serif", color: "#dce6df" },
         legend: { orientation: "h", y: 1.12 },
         xaxis: {
-          title: "Scrape time",
+          title: "Scrape time (ET)",
+          type: "date",
+          tickformat: "%m/%d %H:%M",
           gridcolor: "rgba(255,255,255,0.06)",
           zeroline: false,
         },
@@ -376,56 +580,269 @@
       }, { displayModeBar: false, responsive: true });
     }
 
-    let batches = [];
-
-    async function loadBatches() {
-      batches = await rpc("list_scrape_batches", { p_limit: 40 });
-      const sel = $("batch");
-      sel.innerHTML = batches.map((b, i) => {
+    async function loadBatchesInto(selectId, storeKey) {
+      const cutoff = etDaysAgoYmd(6);
+      const all = await rpc("list_scrape_batches", { p_limit: 100 });
+      const filtered = all.filter((b) => String(b.subbatch_date || "") >= cutoff);
+      if (storeKey === "city") batches = filtered;
+      else feedBatches = filtered;
+      const sel = $(selectId);
+      const list = storeKey === "city" ? batches : feedBatches;
+      sel.innerHTML = list.map((b, i) => {
         const label = `${b.subbatch_date} · ${b.subbatch} · ${b.scrape_count} snaps · ${fmt(b.latest_total)}`;
         return `<option value="${i}">${label}</option>`;
       }).join("");
     }
 
-    async function loadSeries() {
-      showError(null);
+    async function loadCitySeries() {
+      showError("error", null);
       const batch = batches[Number($("batch").value)];
       if (!batch) return;
-      renderMeta(batch);
-
+      renderMeta(batch, "meta");
       let series = await rpc("city_volume_series", { p_subbatch: batch.subbatch });
       series = series.filter((r) => r.city !== "Unmapped");
       if (!series.length) {
         $("tiles").innerHTML = "";
         Plotly.purge("chart");
-        showError(new Error("No mapped city/hub rows for this batch."));
+        showError("error", new Error("No mapped city/hub rows for this batch."));
         return;
       }
-
       const latestTs = series.reduce((m, r) => (r.scraped_at > m ? r.scraped_at : m), series[0].scraped_at);
       const latest = series
         .filter((r) => r.scraped_at === latestTs)
         .sort((a, b) => b.total_volume - a.total_volume);
-      const topN = Number($("topn").value);
-      const topCities = latest.slice(0, topN).map((r) => r.city);
-
       renderTiles(latest);
-      renderChart(series, topCities, $("metric").value);
+      renderChart(series, latest.map((r) => r.city), $("metric").value);
+    }
+
+    function buildFeedModel(rows) {
+      const byStation = new Map();
+      for (const r of rows) {
+        if (!byStation.has(r.station_name)) byStation.set(r.station_name, []);
+        byStation.get(r.station_name).push(r);
+      }
+
+      const latest = STATION_ORDER.map((name) => {
+        const list = (byStation.get(name) || []).slice().sort((a, b) => new Date(a.scraped_at) - new Date(b.scraped_at));
+        const last = list[list.length - 1];
+        return { station: name, volume: last ? Number(last.volume || 0) : 0 };
+      });
+
+      const hourly = [];
+      const hourMap = new Map();
+      for (const name of STATION_ORDER) {
+        const bounds = (byStation.get(name) || [])
+          .filter((r) => r.is_hour_boundary)
+          .sort((a, b) => new Date(a.scraped_at) - new Date(b.scraped_at));
+        for (let i = 1; i < bounds.length; i += 1) {
+          const prev = bounds[i - 1];
+          const cur = bounds[i];
+          const startMs = new Date(prev.scraped_at).getTime();
+          const endMs = new Date(cur.scraped_at).getTime();
+          const label = hourRangeLabel(prev.scraped_at, cur.scraped_at);
+          const shortLabel = formatHour12(prev.scraped_at);
+          const delta = Math.max(0, Number(cur.volume || 0) - Number(prev.volume || 0));
+          hourly.push({
+            station: name,
+            startMs,
+            endMs,
+            label,
+            shortLabel,
+            delta,
+            endVolume: Number(cur.volume || 0),
+            startIso: prev.scraped_at,
+            endIso: cur.scraped_at,
+          });
+          if (!hourMap.has(startMs)) {
+            hourMap.set(startMs, { startMs, endMs, label, shortLabel, startIso: prev.scraped_at, endIso: cur.scraped_at });
+          }
+        }
+      }
+
+      const hours = [...hourMap.values()].sort((a, b) => a.startMs - b.startMs);
+      return { latest, hourly, hours };
+    }
+
+    function renderStationCards(latest) {
+      const total = latest.reduce((s, r) => s + r.volume, 0) || 1;
+      const card = (r) => {
+        const pct = ((r.volume / total) * 100).toFixed(1);
+        return `<div class="station-card">
+          <div class="name">${r.station}</div>
+          <div class="pcs">${fmt(r.volume)}<span>pcs</span></div>
+          <div class="pct">${pct}%</div>
+        </div>`;
+      };
+      $("upper-cards").innerHTML = latest.slice(0, 5).map(card).join("");
+      $("lower-cards").innerHTML = latest.slice(5, 10).map(card).join("");
+    }
+
+    function renderHourButtons() {
+      const box = $("hour-buttons");
+      box.innerHTML = feedHours.map((h) => {
+        const active = baselineStartMs === h.startMs ? "active" : "";
+        return `<button type="button" class="hour-btn ${active}" data-start="${h.startMs}">${h.shortLabel}</button>`;
+      }).join("");
+      box.querySelectorAll("button").forEach((btn) => {
+        btn.addEventListener("click", (event) => {
+          event.stopPropagation();
+          baselineStartMs = Number(btn.dataset.start);
+          renderFeedChart();
+          renderHourButtons();
+        });
+      });
+    }
+
+    function renderFeedChart() {
+      const hours = feedHours.filter((h) => baselineStartMs == null || h.startMs >= baselineStartMs);
+      const visibleHourly = feedHourly.filter((h) => baselineStartMs == null || h.startMs >= baselineStartMs);
+      const totals = STATION_ORDER.map((station) => {
+        const rows = visibleHourly.filter((r) => r.station === station);
+        return rows.reduce((s, r) => s + r.delta, 0);
+      });
+
+      const traces = hours.map((hour, i) => {
+        const y = STATION_ORDER.map((station) => {
+          const hit = visibleHourly.find((r) => r.station === station && r.startMs === hour.startMs);
+          return hit ? hit.delta : 0;
+        });
+        const customdata = STATION_ORDER.map((station) => {
+          const hit = visibleHourly.find((r) => r.station === station && r.startMs === hour.startMs);
+          return hit ? [hit.label, hit.delta] : [hour.label, 0];
+        });
+        const isTop = i === hours.length - 1;
+        return {
+          type: "bar",
+          name: hour.shortLabel,
+          x: STATION_ORDER,
+          y,
+          customdata,
+          text: isTop ? totals.map((n) => fmt(n)) : undefined,
+          textposition: isTop ? "outside" : undefined,
+          cliponaxis: false,
+          marker: { color: COLORS[i % COLORS.length] },
+          hovertemplate: "%{x}<br>%{customdata[0]}<br>%{customdata[1]:,} pcs<extra></extra>",
+        };
+      });
+
+      const layout = {
+        barmode: "stack",
+        margin: { l: 55, r: 20, t: 36, b: 90 },
+        paper_bgcolor: "rgba(0,0,0,0)",
+        plot_bgcolor: "rgba(0,0,0,0)",
+        font: { family: "Outfit, sans-serif", color: "#dce6df" },
+        legend: { orientation: "h", y: 1.15 },
+        xaxis: {
+          tickangle: -25,
+          gridcolor: "rgba(255,255,255,0.04)",
+        },
+        yaxis: {
+          title: "Packages",
+          gridcolor: "rgba(255,255,255,0.06)",
+          zeroline: false,
+        },
+      };
+      const opts = { displayModeBar: false, responsive: true };
+      const plotPromise = feedPlotReady
+        ? Plotly.react("feed-chart", traces, layout, opts)
+        : Plotly.newPlot("feed-chart", traces, layout, opts);
+
+      plotPromise.then((gd) => {
+        feedPlotReady = true;
+        gd.removeAllListeners?.("plotly_click");
+        gd.on("plotly_click", (ev) => {
+          const pt = ev?.points?.[0];
+          if (!pt) return;
+          const station = pt.x;
+          const label = pt.customdata?.[0] || pt.data?.name || "";
+          const pcs = Number(pt.customdata?.[1] ?? pt.y ?? 0);
+          const detail = $("stack-detail");
+          detail.classList.remove("hidden");
+          detail.textContent = `${station}\n${label}\n${fmt(pcs)} pcs`;
+        });
+        if (!gd.dataset.resetBound) {
+          gd.dataset.resetBound = "1";
+          gd.addEventListener("click", (event) => {
+            const t = event.target;
+            const onBar = t.closest?.(".point, .bars, path.point");
+            if (onBar) return;
+            if (t.classList?.contains("bg") || t.classList?.contains("nsewdrag") || t.classList?.contains("draglayer")) {
+              baselineStartMs = feedHours[0]?.startMs ?? null;
+              $("stack-detail").classList.add("hidden");
+              renderHourButtons();
+              renderFeedChart();
+            }
+          });
+        }
+      });
+    }
+
+    async function loadFeedSeries() {
+      showError("feed-error", null);
+      $("stack-detail").classList.add("hidden");
+      const batch = feedBatches[Number($("feed-batch").value)];
+      if (!batch) return;
+      renderMeta(batch, "feed-meta");
+      const rows = await rpc("feed_station_series", { p_subbatch: batch.subbatch });
+      if (!rows.length) {
+        $("upper-cards").innerHTML = "";
+        $("lower-cards").innerHTML = "";
+        $("hour-buttons").innerHTML = "";
+        Plotly.purge("feed-chart");
+        showError("feed-error", new Error("No feed station rows for this batch."));
+        return;
+      }
+      const model = buildFeedModel(rows);
+      feedLatest = model.latest;
+      feedHourly = model.hourly;
+      feedHours = model.hours;
+      baselineStartMs = feedHours[0]?.startMs ?? null;
+      renderStationCards(feedLatest);
+      renderHourButtons();
+      renderFeedChart();
     }
 
     async function bootApp() {
       try {
-        await loadBatches();
-        await loadSeries();
+        if (hasRole("city")) {
+          await loadBatchesInto("batch", "city");
+          await loadCitySeries();
+        }
+        if (hasRole("feed")) {
+          await loadBatchesInto("feed-batch", "feed");
+          await loadFeedSeries();
+        }
       } catch (err) {
-        showError(err);
+        if (hasRole("city")) showError("error", err);
+        if (hasRole("feed")) showError("feed-error", err);
       }
     }
 
-    $("batch").addEventListener("change", () => loadSeries().catch(showError));
-    $("metric").addEventListener("change", () => loadSeries().catch(showError));
-    $("topn").addEventListener("change", () => loadSeries().catch(showError));
-    $("reload").addEventListener("click", () => bootApp());
+    $("batch").addEventListener("change", () => loadCitySeries().catch((e) => showError("error", e)));
+    $("metric").addEventListener("change", () => loadCitySeries().catch((e) => showError("error", e)));
+    $("reload").addEventListener("click", () => {
+      loadBatchesInto("batch", "city").then(loadCitySeries).catch((e) => showError("error", e));
+    });
+    $("feed-batch").addEventListener("change", () => loadFeedSeries().catch((e) => showError("feed-error", e)));
+    $("feed-reload").addEventListener("click", () => {
+      loadBatchesInto("feed-batch", "feed").then(loadFeedSeries).catch((e) => showError("feed-error", e));
+    });
+
+    // Click blank area beside chart / hour axis container to reset baseline
+    document.addEventListener("click", (event) => {
+      const feedSection = $("feed-section");
+      if (feedSection.classList.contains("hidden")) return;
+      if (event.target.closest("#hour-buttons") || event.target.closest("#stack-detail")) return;
+      if (event.target.closest(".feed-chart-wrap") && !event.target.closest(".point, .trace, path, .bars")) {
+        // handled cautiously in plot click; also allow clicking hour-axis title area
+        if (event.target.classList.contains("axis-title") || event.target.classList.contains("hour-axis")) {
+          baselineStartMs = feedHours[0]?.startMs ?? null;
+          $("stack-detail").classList.add("hidden");
+          renderHourButtons();
+          renderFeedChart();
+        }
+      }
+    });
 
     $("login-form").addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -433,10 +850,7 @@
       const email = toAuthEmail($("username").value);
       const password = $("password").value;
       const { error } = await sb.auth.signInWithPassword({ email, password });
-      if (error) {
-        showLoginError(error);
-        return;
-      }
+      if (error) showLoginError(error);
     });
 
     $("logout").addEventListener("click", async () => {
@@ -448,9 +862,16 @@
       if (session) {
         await bootApp();
       } else {
+        roles = [];
         batches = [];
+        feedBatches = [];
         $("tiles").innerHTML = "";
-        if (window.Plotly) Plotly.purge("chart");
+        $("upper-cards").innerHTML = "";
+        $("lower-cards").innerHTML = "";
+        if (window.Plotly) {
+          Plotly.purge("chart");
+          Plotly.purge("feed-chart");
+        }
       }
     });
 

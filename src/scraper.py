@@ -4,12 +4,11 @@ from __future__ import annotations
 
 import csv
 import io
-import os
 import re
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 
-from playwright.sync_api import Download, Frame, Page, sync_playwright
+from playwright.sync_api import Download, Frame, Page
 
 from .config import Settings, SubbatchJob
 
@@ -108,15 +107,17 @@ def _login_error_message(page: Page) -> str | None:
 
 
 def _login_inputs(page: Page):
-    username = page.locator(
-        '[data-testid="login-username-input"], input[name="username"], input[autocomplete="username"]'
-    ).first
+    username = page.locator('[data-testid="login-username-input"]').first
+    if username.count() == 0 or not username.is_visible():
+        username = page.locator(
+            'input[name="username"], input[autocomplete="username"], input[type="text"]'
+        ).first
     if username.count() == 0 or not username.is_visible():
         username = page.get_by_role("textbox", name=re.compile(r"username", re.I)).first
 
-    password = page.locator(
-        '[data-testid="login-password-input"], input[name="password"], input[type="password"]'
-    ).first
+    password = page.locator('[data-testid="login-password-input"]').first
+    if password.count() == 0 or not password.is_visible():
+        password = page.locator('input[name="password"], input[type="password"]').first
     if password.count() == 0 or not password.is_visible():
         password = page.get_by_role("textbox", name=re.compile(r"password", re.I)).first
 
@@ -127,39 +128,96 @@ def _login_inputs(page: Page):
     return username, password, submit
 
 
-def _login_with_credentials(page: Page, settings: Settings) -> None:
-    if _portal_logged_in(page):
-        return
-
-    if "/login" not in page.url:
-        page.goto(settings.uniuni_portal_url, wait_until="domcontentloaded", timeout=60_000)
-
+def _fill_and_submit_login(page: Page, settings: Settings) -> bool:
+    """Fill username/password on the full-page login or any re-auth modal. Returns True if submitted."""
     _dismiss_portal_dialogs(page)
     username_input, password_input, login_button = _login_inputs(page)
-
     if username_input.count() == 0 or password_input.count() == 0 or login_button.count() == 0:
-        raise RuntimeError(
-            "UniMap username/password login form not found. "
-            f"Current url={page.url!r}. Re-run with --headed to inspect the login page."
-        )
+        return False
+    if not password_input.is_visible():
+        return False
+
+    print(f"Filling UniMap login for user {settings.uniuni_username!r}...")
+    username_input.click(force=True)
+    username_input.fill("")
+    username_input.fill(settings.uniuni_username)
+    password_input.click(force=True)
+    password_input.fill("")
+    password_input.fill(settings.uniuni_password)
+    # Ensure React/MUI controlled inputs see the values.
+    page.evaluate(
+        """([user, pass]) => {
+          const u = document.querySelector('[data-testid="login-username-input"]');
+          const p = document.querySelector('[data-testid="login-password-input"]');
+          if (u) {
+            const proto = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value');
+            proto.set.call(u, user);
+            u.dispatchEvent(new Event('input', { bubbles: true }));
+            u.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+          if (p) {
+            const proto = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value');
+            proto.set.call(p, pass);
+            p.dispatchEvent(new Event('input', { bubbles: true }));
+            p.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+        }""",
+        [settings.uniuni_username, settings.uniuni_password],
+    )
+    login_button.click(force=True)
+    return True
+
+
+def _login_form_visible(page: Page) -> bool:
+    password = page.locator('[data-testid="login-password-input"], input[type="password"]')
+    return password.count() > 0 and password.first.is_visible()
+
+
+def _login_with_credentials(page: Page, settings: Settings) -> None:
+    """Username/password login for full-page /login or re-auth modal on /main."""
+    _dismiss_portal_dialogs(page)
+
+    if _portal_logged_in(page) and not _login_form_visible(page):
+        return
 
     last_error = "UniMap login did not complete."
     for attempt in range(1, 4):
-        username_input.fill(settings.uniuni_username)
-        password_input.fill(settings.uniuni_password)
-        login_button.click(force=True)
+        if not _login_form_visible(page):
+            page.goto(settings.uniuni_portal_url, wait_until="domcontentloaded", timeout=60_000)
+            _dismiss_portal_dialogs(page)
+            try:
+                page.wait_for_selector(
+                    '[data-testid="login-password-input"], input[type="password"]',
+                    timeout=30_000,
+                )
+            except Exception:
+                last_error = (
+                    "UniMap username/password login form not found. "
+                    f"Current url={page.url!r}."
+                )
+                continue
+
+        print(f"UniMap password login attempt {attempt}/3...")
+        if not _fill_and_submit_login(page, settings):
+            last_error = (
+                "UniMap username/password login form not found. "
+                f"Current url={page.url!r}."
+            )
+            page.wait_for_timeout(2_000)
+            continue
 
         try:
             page.wait_for_url(
                 re.compile(r"dispatch\.uniuni\.com/(main|sorting-production-analysis)"),
                 timeout=30_000,
             )
-            return
         except Exception:
             pass
 
         page.wait_for_timeout(2_000)
-        if _portal_logged_in(page):
+        _dismiss_portal_dialogs(page)
+        if _portal_logged_in(page) and not _login_form_visible(page):
+            print("UniMap login succeeded.")
             return
 
         login_error = _login_error_message(page)
@@ -193,20 +251,28 @@ def _open_sorting_production_analysis(page: Page) -> None:
 
 
 def _ensure_logged_in_and_open_analysis(page: Page, settings: Settings) -> None:
+    """Open Sorting Production Analysis; login only if the nj600 session expired."""
+    if _analysis_ready(page) and not _login_form_visible(page) and not _is_login_page(page):
+        _dismiss_portal_dialogs(page)
+        return
+
     page.goto(ANALYSIS_URL, wait_until="domcontentloaded", timeout=60_000)
     _dismiss_portal_dialogs(page)
 
     for _ in range(20):
-        if not _is_login_page(page):
+        if not _is_login_page(page) and not _login_form_visible(page):
             break
         page.wait_for_timeout(500)
 
-    if _is_login_page(page):
+    if _is_login_page(page) or _login_form_visible(page):
+        print("UniMap session missing/expired — logging in with .env credentials...")
         _login_with_credentials(page, settings)
         page.goto(ANALYSIS_URL, wait_until="domcontentloaded", timeout=60_000)
         _dismiss_portal_dialogs(page)
+    else:
+        print("Already logged in as nj600 session — opening Sorting Production Analysis.")
 
-    if _is_login_page(page):
+    if _is_login_page(page) or _login_form_visible(page):
         raise RuntimeError(
             "UniMap login did not complete. "
             f"Current url={page.url!r}. "
@@ -371,30 +437,21 @@ def _launch_browser(playwright, *, headless: bool):
     return playwright.chromium.launch(**launch_kwargs)
 
 
+def scrape_on_page(page: Page, settings: Settings, job: SubbatchJob) -> ScrapeResult:
+    """Query Sorting Production Analysis on an already-open UniMap page."""
+    _ensure_logged_in_and_open_analysis(page, settings)
+    target = _submit_query(page, job)
+    return ScrapeResult(
+        hourly=_download_hourly_csv(page, job.operation_date),
+        chutes=_parse_chutes(target),
+        feed_stations=_parse_feed_stations(target),
+        scraped_at=datetime.now(timezone.utc),
+    )
+
+
 def scrape_job(settings: Settings, job: SubbatchJob, *, headless: bool = True) -> ScrapeResult:
-    with sync_playwright() as playwright:
-        browser = _launch_browser(playwright, headless=headless)
-        context_kwargs: dict[str, object] = {"accept_downloads": True}
-        state_path = settings.uniuni_auth_state_path
-        if state_path and os.path.exists(state_path):
-            context_kwargs["storage_state"] = state_path
+    """Standalone scrape (own browser). Prefer open_uniuni_session in normal runs."""
+    from .session import open_uniuni_session
 
-        context = browser.new_context(**context_kwargs)
-        page = context.new_page()
-        try:
-            _ensure_logged_in_and_open_analysis(page, settings)
-            target = _submit_query(page, job)
-
-            result = ScrapeResult(
-                hourly=_download_hourly_csv(page, job.operation_date),
-                chutes=_parse_chutes(target),
-                feed_stations=_parse_feed_stations(target),
-                scraped_at=datetime.now(timezone.utc),
-            )
-            return result
-        finally:
-            if state_path:
-                os.makedirs(os.path.dirname(state_path) or ".", exist_ok=True)
-                context.storage_state(path=state_path)
-            context.close()
-            browser.close()
+    with open_uniuni_session(settings, headless=headless) as session:
+        return session.scrape(job)
