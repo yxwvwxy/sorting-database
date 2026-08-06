@@ -276,6 +276,18 @@
       text-align: center;
       margin-bottom: 0.25rem;
     }
+    #hour-buttons {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+      flex: 1;
+    }
+    #hour-list {
+      display: flex;
+      flex-direction: column-reverse;
+      gap: 0.35rem;
+      margin-top: auto;
+    }
     .hour-btn {
       width: 100%;
       min-width: 0;
@@ -291,6 +303,10 @@
       border-color: var(--amber);
       color: var(--amber);
       background: rgba(240,162,2,0.12);
+    }
+    .hour-btn.partial::after {
+      content: " ·";
+      color: var(--muted);
     }
     .stack-detail {
       margin: 0.75rem 0 0;
@@ -376,7 +392,7 @@
         <div id="lower-cards" class="station-grid"></div>
       </div>
 
-      <p class="caption">Stacked bars = hourly increment (:30 → next :30 ET). Click a stack for details. Click a time on the right to set the stack baseline; click chart blank space to reset to the first :30.</p>
+      <p class="caption">All Day = one stack per period, oldest at the x-axis. Earliest tab = first scrape time; later tabs are :30 marks. Each tab shows only that period’s total. Click a stack for details.</p>
       <div class="feed-chart-wrap">
         <div class="panel"><div id="feed-chart"></div></div>
         <div class="hour-axis">
@@ -405,10 +421,10 @@
     let roles = [];
     let batches = [];
     let feedBatches = [];
-    let feedHours = []; // {startMs, endMs, label, shortLabel}
-    let feedHourly = []; // {station, startMs, endMs, label, delta, endVolume}
-    let feedLatest = []; // {station, volume}
-    let baselineStartMs = null;
+    let feedLayers = []; // per-station hourly totals
+    let feedHourTabs = []; // :30 hour buckets
+    let feedLatest = [];
+    let feedMode = "all"; // "all" | hourStartMs number
     let feedPlotReady = false;
 
     function normalizeUsername(username) {
@@ -483,14 +499,55 @@
 
     function formatHour12(iso) {
       const p = etParts(iso, { hour: "numeric", minute: "2-digit", hour12: true });
-      const hour = String(p.hour);
-      const minute = p.minute;
-      const dayPeriod = String(p.dayPeriod || "").toLowerCase();
-      return `${hour}:${minute}${dayPeriod}`;
+      return `${p.hour}:${p.minute}${String(p.dayPeriod || "").toLowerCase()}`;
     }
 
     function hourRangeLabel(startIso, endIso) {
       return `${formatHour12(startIso)}-${formatHour12(endIso)}`;
+    }
+
+    /** Regular :30 hour bucket for a scrape end (7:30→6:30, 7:50→7:30). */
+    function regularHalfHourBucketMs(iso) {
+      const etMs = new Date(iso).getTime();
+      const minute = Number(etParts(iso, { minute: "2-digit", hour12: false }).minute);
+      const deltaMin = minute > 30 ? (minute - 30) : (minute + 30);
+      const d = new Date(iso);
+      return etMs - deltaMin * 60 * 1000 - d.getSeconds() * 1000 - d.getMilliseconds();
+    }
+
+    /** Next ET :30 mark strictly after iso. */
+    function nextEtHalfHourMs(iso) {
+      const t = new Date(iso).getTime();
+      for (let add = 1; add <= 90; add += 1) {
+        const cand = t + add * 60 * 1000;
+        const minute = Number(etParts(new Date(cand).toISOString(), { minute: "2-digit", hour12: false }).minute);
+        if (minute === 30) {
+          const sec = Number(etParts(new Date(cand).toISOString(), { second: "2-digit", hour12: false }).second || 0);
+          return cand - sec * 1000 - new Date(cand).getMilliseconds();
+        }
+      }
+      return t + 60 * 60 * 1000;
+    }
+
+    /**
+     * Period start for a scrape ending at iso.
+     * Opening period = first scrape → next :30 (tab labeled as first scrape time).
+     * Later periods use normal :30 buckets.
+     */
+    function hourBucketStartMs(iso, firstIso) {
+      const t = new Date(iso).getTime();
+      const firstMs = new Date(firstIso).getTime();
+      const secondMs = nextEtHalfHourMs(firstIso);
+      if (t <= secondMs) return firstMs;
+      return regularHalfHourBucketMs(iso);
+    }
+
+    function addOneHourMs(startMs) {
+      return startMs + 60 * 60 * 1000;
+    }
+
+    function shortLabelFromMs(ms) {
+      return formatHour12(new Date(ms).toISOString());
     }
 
     async function rpc(name, args = {}) {
@@ -564,20 +621,25 @@
         plot_bgcolor: "rgba(0,0,0,0)",
         font: { family: "Outfit, sans-serif", color: "#dce6df" },
         legend: { orientation: "h", y: 1.12 },
+        dragmode: false,
         xaxis: {
           title: "Scrape time (ET)",
           type: "date",
           tickformat: "%m/%d %H:%M",
           gridcolor: "rgba(255,255,255,0.06)",
           zeroline: false,
+          fixedrange: true,
+          showspikes: false,
         },
         yaxis: {
           title: metric === "delta" ? "Packages since previous scrape" : "Cumulative packages",
           gridcolor: "rgba(255,255,255,0.06)",
           zeroline: false,
+          fixedrange: true,
+          showspikes: false,
         },
-        hovermode: "x unified",
-      }, { displayModeBar: false, responsive: true });
+        hovermode: "closest",
+      }, { displayModeBar: false, responsive: true, scrollZoom: false, doubleClick: false });
     }
 
     async function loadBatchesInto(selectId, storeKey) {
@@ -592,6 +654,11 @@
         const label = `${b.subbatch_date} · ${b.subbatch} · ${b.scrape_count} snaps · ${fmt(b.latest_total)}`;
         return `<option value="${i}">${label}</option>`;
       }).join("");
+      // Prefer a batch with enough scrapes for charts (latest with >= 2).
+      if (storeKey === "feed" && list.length) {
+        const idx = list.findIndex((b) => Number(b.scrape_count || 0) >= 2);
+        sel.value = String(idx >= 0 ? idx : 0);
+      }
     }
 
     async function loadCitySeries() {
@@ -621,46 +688,84 @@
         if (!byStation.has(r.station_name)) byStation.set(r.station_name, []);
         byStation.get(r.station_name).push(r);
       }
+      for (const list of byStation.values()) {
+        list.sort((a, b) => new Date(a.scraped_at) - new Date(b.scraped_at));
+      }
 
       const latest = STATION_ORDER.map((name) => {
-        const list = (byStation.get(name) || []).slice().sort((a, b) => new Date(a.scraped_at) - new Date(b.scraped_at));
+        const list = byStation.get(name) || [];
         const last = list[list.length - 1];
         return { station: name, volume: last ? Number(last.volume || 0) : 0 };
       });
 
-      const hourly = [];
-      const hourMap = new Map();
+      // First scrape across stations (batch start); opening tab uses this timestamp.
+      let firstIso = null;
       for (const name of STATION_ORDER) {
-        const bounds = (byStation.get(name) || [])
-          .filter((r) => r.is_hour_boundary)
-          .sort((a, b) => new Date(a.scraped_at) - new Date(b.scraped_at));
-        for (let i = 1; i < bounds.length; i += 1) {
-          const prev = bounds[i - 1];
-          const cur = bounds[i];
-          const startMs = new Date(prev.scraped_at).getTime();
-          const endMs = new Date(cur.scraped_at).getTime();
-          const label = hourRangeLabel(prev.scraped_at, cur.scraped_at);
-          const shortLabel = formatHour12(prev.scraped_at);
+        const list = byStation.get(name) || [];
+        if (!list.length) continue;
+        if (!firstIso || new Date(list[0].scraped_at) < new Date(firstIso)) {
+          firstIso = list[0].scraped_at;
+        }
+      }
+      const firstMs = firstIso ? new Date(firstIso).getTime() : null;
+      const secondMs = firstIso ? nextEtHalfHourMs(firstIso) : null;
+
+      // Aggregate scrape→scrape deltas into one total per station per period.
+      const hourTotals = new Map(); // key: `${station}|${hourStartMs}` → delta
+      const hourMeta = new Map(); // hourStartMs → tab meta
+      for (const name of STATION_ORDER) {
+        const list = byStation.get(name) || [];
+        for (let i = 1; i < list.length; i += 1) {
+          const prev = list[i - 1];
+          const cur = list[i];
+          const hourStartMs = hourBucketStartMs(cur.scraped_at, firstIso);
           const delta = Math.max(0, Number(cur.volume || 0) - Number(prev.volume || 0));
-          hourly.push({
-            station: name,
-            startMs,
-            endMs,
-            label,
-            shortLabel,
-            delta,
-            endVolume: Number(cur.volume || 0),
-            startIso: prev.scraped_at,
-            endIso: cur.scraped_at,
-          });
-          if (!hourMap.has(startMs)) {
-            hourMap.set(startMs, { startMs, endMs, label, shortLabel, startIso: prev.scraped_at, endIso: cur.scraped_at });
+          const key = `${name}|${hourStartMs}`;
+          hourTotals.set(key, (hourTotals.get(key) || 0) + delta);
+
+          if (!hourMeta.has(hourStartMs)) {
+            const isOpening = firstMs != null && hourStartMs === firstMs;
+            const endMs = isOpening ? secondMs : addOneHourMs(hourStartMs);
+            hourMeta.set(hourStartMs, {
+              startMs: hourStartMs,
+              endMs,
+              shortLabel: isOpening ? formatHour12(firstIso) : shortLabelFromMs(hourStartMs),
+              label: `${isOpening ? formatHour12(firstIso) : shortLabelFromMs(hourStartMs)}-${shortLabelFromMs(endMs)}`,
+              complete: false,
+              opening: isOpening,
+            });
+          }
+          const tab = hourMeta.get(hourStartMs);
+          if (tab.opening) {
+            if (new Date(cur.scraped_at).getTime() >= secondMs - 60 * 1000) tab.complete = true;
+          } else {
+            const minute = Number(etParts(cur.scraped_at, { minute: "2-digit", hour12: false }).minute);
+            if (minute >= 25 && minute <= 40) tab.complete = true;
           }
         }
       }
 
-      const hours = [...hourMap.values()].sort((a, b) => a.startMs - b.startMs);
-      return { latest, hourly, hours };
+      const hourTabs = [...hourMeta.values()].sort((a, b) => a.startMs - b.startMs);
+      for (const tab of hourTabs) {
+        if (hourTabs.some((h) => h.startMs > tab.startMs)) tab.complete = true;
+      }
+
+      // One layer per station per hour (used by chart).
+      const layers = [];
+      for (const tab of hourTabs) {
+        for (const name of STATION_ORDER) {
+          const delta = hourTotals.get(`${name}|${tab.startMs}`) || 0;
+          layers.push({
+            station: name,
+            hourStartMs: tab.startMs,
+            label: tab.label,
+            shortLabel: tab.shortLabel,
+            delta,
+          });
+        }
+      }
+
+      return { latest, layers, hourTabs };
     }
 
     function renderStationCards(latest) {
@@ -677,43 +782,84 @@
       $("lower-cards").innerHTML = latest.slice(5, 10).map(card).join("");
     }
 
+    function visibleLayers() {
+      if (feedMode === "all") return feedLayers.slice();
+      const startMs = Number(feedMode);
+      return feedLayers.filter((l) => l.hourStartMs === startMs);
+    }
+
+    /** Hour keys for stacks: All Day = each hour; hour tab = that one hour only. */
+    function visibleHourKeys() {
+      if (feedMode === "all") {
+        return feedHourTabs
+          .slice()
+          .sort((a, b) => a.startMs - b.startMs) // oldest first → bottom of stack
+          .map((h) => ({
+            hourStartMs: h.startMs,
+            label: h.label,
+            shortLabel: h.shortLabel,
+          }));
+      }
+      const tab = feedHourTabs.find((h) => h.startMs === Number(feedMode));
+      if (!tab) return [];
+      return [{ hourStartMs: tab.startMs, label: tab.label, shortLabel: tab.shortLabel }];
+    }
+
     function renderHourButtons() {
       const box = $("hour-buttons");
-      box.innerHTML = feedHours.map((h) => {
-        const active = baselineStartMs === h.startMs ? "active" : "";
-        return `<button type="button" class="hour-btn ${active}" data-start="${h.startMs}">${h.shortLabel}</button>`;
+      const allActive = feedMode === "all" ? "active" : "";
+      const hourBtns = feedHourTabs.map((h) => {
+        const active = feedMode === h.startMs ? "active" : "";
+        const partial = h.complete ? "" : "partial";
+        return `<button type="button" class="hour-btn ${active} ${partial}" data-mode="${h.startMs}">${h.shortLabel}</button>`;
       }).join("");
-      box.querySelectorAll("button").forEach((btn) => {
+      box.innerHTML = `
+        <button type="button" class="hour-btn ${allActive}" data-mode="all">All Day</button>
+        <div id="hour-list">${hourBtns}</div>
+      `;
+      box.querySelectorAll("button[data-mode]").forEach((btn) => {
         btn.addEventListener("click", (event) => {
           event.stopPropagation();
-          baselineStartMs = Number(btn.dataset.start);
-          renderFeedChart();
+          const mode = btn.dataset.mode;
+          feedMode = mode === "all" ? "all" : Number(mode);
+          $("stack-detail").classList.add("hidden");
           renderHourButtons();
+          renderFeedChart();
         });
       });
     }
 
     function renderFeedChart() {
-      const hours = feedHours.filter((h) => baselineStartMs == null || h.startMs >= baselineStartMs);
-      const visibleHourly = feedHourly.filter((h) => baselineStartMs == null || h.startMs >= baselineStartMs);
-      const totals = STATION_ORDER.map((station) => {
-        const rows = visibleHourly.filter((r) => r.station === station);
-        return rows.reduce((s, r) => s + r.delta, 0);
-      });
+      const keys = visibleHourKeys();
+      const layers = visibleLayers();
+      if (!keys.length) {
+        feedPlotReady = false;
+        Plotly.purge("feed-chart");
+        $("feed-chart").innerHTML = `<div style="padding:2rem;color:#9aa8a0;font-family:IBM Plex Mono,monospace;font-size:0.9rem;">
+          Need at least 2 scrapes in this batch to build stacks.<br/>
+          Station cards above still show the latest cumulative totals.
+        </div>`;
+        return;
+      }
 
-      const traces = hours.map((hour, i) => {
+      const totals = STATION_ORDER.map((station) => (
+        layers.filter((r) => r.station === station).reduce((s, r) => s + r.delta, 0)
+      ));
+
+      // One trace per hour; oldest first ⇒ closest to x-axis.
+      const traces = keys.map((key, i) => {
         const y = STATION_ORDER.map((station) => {
-          const hit = visibleHourly.find((r) => r.station === station && r.startMs === hour.startMs);
+          const hit = layers.find((r) => r.station === station && r.hourStartMs === key.hourStartMs);
           return hit ? hit.delta : 0;
         });
         const customdata = STATION_ORDER.map((station) => {
-          const hit = visibleHourly.find((r) => r.station === station && r.startMs === hour.startMs);
-          return hit ? [hit.label, hit.delta] : [hour.label, 0];
+          const hit = layers.find((r) => r.station === station && r.hourStartMs === key.hourStartMs);
+          return hit ? [hit.label, hit.delta] : [key.label, 0];
         });
-        const isTop = i === hours.length - 1;
+        const isTop = i === keys.length - 1;
         return {
           type: "bar",
-          name: hour.shortLabel,
+          name: key.shortLabel,
           x: STATION_ORDER,
           y,
           customdata,
@@ -731,18 +877,29 @@
         paper_bgcolor: "rgba(0,0,0,0)",
         plot_bgcolor: "rgba(0,0,0,0)",
         font: { family: "Outfit, sans-serif", color: "#dce6df" },
-        legend: { orientation: "h", y: 1.15 },
+        legend: { orientation: "h", y: 1.15, traceorder: "normal" },
+        dragmode: false,
         xaxis: {
           tickangle: -25,
           gridcolor: "rgba(255,255,255,0.04)",
+          fixedrange: true,
+          showspikes: false,
         },
         yaxis: {
           title: "Packages",
           gridcolor: "rgba(255,255,255,0.06)",
           zeroline: false,
+          fixedrange: true,
+          showspikes: false,
         },
+        hovermode: "closest",
       };
-      const opts = { displayModeBar: false, responsive: true };
+      const opts = { displayModeBar: false, responsive: true, scrollZoom: false, doubleClick: false };
+      // Ensure container is a clean Plotly target after empty-state HTML.
+      if (!$("feed-chart").classList.contains("js-plotly-plot")) {
+        feedPlotReady = false;
+        $("feed-chart").innerHTML = "";
+      }
       const plotPromise = feedPlotReady
         ? Plotly.react("feed-chart", traces, layout, opts)
         : Plotly.newPlot("feed-chart", traces, layout, opts);
@@ -767,7 +924,7 @@
             const onBar = t.closest?.(".point, .bars, path.point");
             if (onBar) return;
             if (t.classList?.contains("bg") || t.classList?.contains("nsewdrag") || t.classList?.contains("draglayer")) {
-              baselineStartMs = feedHours[0]?.startMs ?? null;
+              feedMode = "all";
               $("stack-detail").classList.add("hidden");
               renderHourButtons();
               renderFeedChart();
@@ -789,14 +946,15 @@
         $("lower-cards").innerHTML = "";
         $("hour-buttons").innerHTML = "";
         Plotly.purge("feed-chart");
+        feedPlotReady = false;
         showError("feed-error", new Error("No feed station rows for this batch."));
         return;
       }
       const model = buildFeedModel(rows);
       feedLatest = model.latest;
-      feedHourly = model.hourly;
-      feedHours = model.hours;
-      baselineStartMs = feedHours[0]?.startMs ?? null;
+      feedLayers = model.layers;
+      feedHourTabs = model.hourTabs;
+      feedMode = "all";
       renderStationCards(feedLatest);
       renderHourButtons();
       renderFeedChart();
@@ -828,19 +986,15 @@
       loadBatchesInto("feed-batch", "feed").then(loadFeedSeries).catch((e) => showError("feed-error", e));
     });
 
-    // Click blank area beside chart / hour axis container to reset baseline
     document.addEventListener("click", (event) => {
       const feedSection = $("feed-section");
       if (feedSection.classList.contains("hidden")) return;
       if (event.target.closest("#hour-buttons") || event.target.closest("#stack-detail")) return;
-      if (event.target.closest(".feed-chart-wrap") && !event.target.closest(".point, .trace, path, .bars")) {
-        // handled cautiously in plot click; also allow clicking hour-axis title area
-        if (event.target.classList.contains("axis-title") || event.target.classList.contains("hour-axis")) {
-          baselineStartMs = feedHours[0]?.startMs ?? null;
-          $("stack-detail").classList.add("hidden");
-          renderHourButtons();
-          renderFeedChart();
-        }
+      if (event.target.classList.contains("axis-title") || event.target.classList.contains("hour-axis")) {
+        feedMode = "all";
+        $("stack-detail").classList.add("hidden");
+        renderHourButtons();
+        renderFeedChart();
       }
     });
 
