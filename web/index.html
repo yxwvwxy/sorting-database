@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sorting Database · City Flow</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Outfit:wght@400;600;700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <style>
+    :root {
+      --bg0: #0b1210;
+      --bg1: #121a22;
+      --ink: #e8eee9;
+      --muted: #9aa8a0;
+      --amber: #f0a202;
+      --mint: #3ddc97;
+      --line: rgba(255,255,255,0.08);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      font-family: Outfit, system-ui, sans-serif;
+      background:
+        radial-gradient(1100px 520px at 8% -8%, rgba(240,162,2,0.16), transparent 55%),
+        radial-gradient(900px 480px at 92% 0%, rgba(61,220,151,0.10), transparent 50%),
+        linear-gradient(165deg, var(--bg0) 0%, var(--bg1) 48%, #0e151c 100%);
+    }
+    main {
+      width: min(1120px, calc(100% - 2rem));
+      margin: 0 auto;
+      padding: 2rem 0 3rem;
+    }
+    .brand {
+      margin: 0;
+      font-size: clamp(2.2rem, 5vw, 3.4rem);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      line-height: 1.05;
+      background: linear-gradient(120deg, #fff6e0 0%, var(--amber) 42%, var(--mint) 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    .lede {
+      margin: 0.5rem 0 1.25rem;
+      max-width: 40rem;
+      color: var(--muted);
+      font-size: 1.05rem;
+    }
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem 1rem;
+      align-items: end;
+      margin-bottom: 1.25rem;
+    }
+    label {
+      display: grid;
+      gap: 0.35rem;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+    select, button, input {
+      font: inherit;
+      border-radius: 2px;
+      border: 1px solid var(--line);
+      background: rgba(0,0,0,0.28);
+      color: var(--ink);
+      padding: 0.55rem 0.7rem;
+      min-width: 16rem;
+    }
+    input { width: 100%; min-width: 0; }
+    button {
+      cursor: pointer;
+      background: linear-gradient(120deg, rgba(240,162,2,0.25), rgba(61,220,151,0.18));
+      border-color: rgba(240,162,2,0.35);
+      min-width: auto;
+    }
+    button:hover { border-color: var(--amber); }
+    button.ghost {
+      background: transparent;
+      border-color: var(--line);
+    }
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem 1.2rem;
+      margin: 0 0 1rem;
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 0.82rem;
+      color: #b7c4bc;
+    }
+    .meta strong { color: var(--amber); font-weight: 500; }
+    .panel {
+      border: 1px solid var(--line);
+      background: rgba(0,0,0,0.18);
+      padding: 0.5rem;
+      margin-bottom: 1.25rem;
+    }
+    h2 {
+      margin: 0 0 0.65rem;
+      font-size: 1.15rem;
+      font-weight: 600;
+    }
+    .caption {
+      margin: 0 0 0.75rem;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 0.65rem;
+    }
+    .tile {
+      border: 1px solid var(--line);
+      background: linear-gradient(160deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015));
+      padding: 0.7rem 0.8rem;
+      transition: border-color 160ms ease, transform 160ms ease;
+    }
+    .tile:hover {
+      border-color: rgba(240,162,2,0.45);
+      transform: translateY(-1px);
+    }
+    .tile .code {
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 0.78rem;
+      color: var(--mint);
+      letter-spacing: 0.04em;
+    }
+    .tile .vol {
+      margin-top: 0.2rem;
+      font-size: 1.3rem;
+      font-weight: 700;
+    }
+    .tile .delta {
+      margin-top: 0.15rem;
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 0.72rem;
+      color: var(--muted);
+    }
+    .error {
+      color: #ff8f8f;
+      white-space: pre-wrap;
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 0.85rem;
+    }
+    #chart { width: 100%; height: 460px; }
+    .hidden { display: none !important; }
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .userchip {
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 0.78rem;
+      color: var(--muted);
+      display: flex;
+      gap: 0.6rem;
+      align-items: center;
+    }
+    #login-view {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 2rem 1rem;
+    }
+    .login-card {
+      width: min(420px, 100%);
+      border: 1px solid var(--line);
+      background: rgba(0,0,0,0.28);
+      padding: 1.6rem 1.4rem 1.4rem;
+    }
+    .login-card .brand {
+      font-size: 2rem;
+      margin-bottom: 0.35rem;
+    }
+    .login-card form {
+      display: grid;
+      gap: 0.85rem;
+      margin-top: 1.1rem;
+    }
+    .login-card button[type="submit"] { width: 100%; padding: 0.7rem; }
+  </style>
+</head>
+<body>
+  <div id="login-view">
+    <div class="login-card">
+      <h1 class="brand">Sorting Database</h1>
+      <p class="lede" style="margin-bottom:0">Sign in to view city / hub flow.</p>
+      <form id="login-form">
+        <label>Username
+          <input id="username" type="text" autocomplete="username" required />
+        </label>
+        <label>Password
+          <input id="password" type="password" autocomplete="current-password" required />
+        </label>
+        <p id="login-error" class="error hidden"></p>
+        <button type="submit">Sign in</button>
+      </form>
+    </div>
+  </div>
+
+  <main id="app-view" class="hidden">
+    <div class="topbar">
+      <div>
+        <h1 class="brand">Sorting Database</h1>
+        <p class="lede">
+          City / hub flow from 20-minute chute snapshots.
+          <code>last_mile</code> uses city; <code>transit</code> uses warehouse.
+          Increments = this scrape − previous.
+        </p>
+      </div>
+      <div class="userchip">
+        <span id="user-email"></span>
+        <button id="logout" type="button" class="ghost">Sign out</button>
+      </div>
+    </div>
+
+    <div class="controls">
+      <label>Batch / ops day
+        <select id="batch"></select>
+      </label>
+      <label>Chart metric
+        <select id="metric">
+          <option value="total">Cumulative total</option>
+          <option value="delta">20-min increment</option>
+        </select>
+      </label>
+      <label>Top N on chart
+        <select id="topn">
+          <option>10</option>
+          <option selected>15</option>
+          <option>20</option>
+          <option>30</option>
+        </select>
+      </label>
+      <label>&nbsp;
+        <button id="reload" type="button">Refresh</button>
+      </label>
+    </div>
+
+    <div id="meta" class="meta"></div>
+    <p id="error" class="error hidden"></p>
+
+    <section>
+      <h2>City / hub growth</h2>
+      <div class="panel"><div id="chart"></div></div>
+    </section>
+
+    <section>
+      <h2>Latest city / hub totals</h2>
+      <p class="caption">Sorted by current cumulative volume. Delta is the latest 20-minute change.</p>
+      <div id="tiles" class="grid"></div>
+    </section>
+  </main>
+
+  <script>
+    const SUPABASE_URL = "https://xllimmgxkttjzaikimtu.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhsbGltbWd4a3R0anphaWtpbXR1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc0ODkwODcsImV4cCI6MjA5MzA2NTA4N30.ULSAIUVpnnCIPUYexpdUh6dxYe40e9LHSmG-7QcAZL0";
+    const USERNAME_DOMAIN = "sorting-db.local";
+    const COLORS = ["#F0A202","#3DDC97","#4CC9F0","#F72585","#B8F2E6","#FF6B35","#7BDFF2","#F9C74F","#90BE6D","#577590","#F8961E","#43AA8B","#F94144","#277DA1","#F3722C"];
+
+    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const $ = (id) => document.getElementById(id);
+    const fmt = (n) => Number(n || 0).toLocaleString("en-US");
+
+    function toAuthEmail(username) {
+      const value = String(username || "").trim();
+      return value.includes("@") ? value : `${value}@${USERNAME_DOMAIN}`;
+    }
+
+    function displayName(email) {
+      if (!email) return "";
+      const suffix = `@${USERNAME_DOMAIN}`;
+      return email.endsWith(suffix) ? email.slice(0, -suffix.length) : email;
+    }
+
+    function toEt(iso) {
+      return new Date(iso).toLocaleString("en-US", {
+        timeZone: "America/New_York",
+        year: "numeric", month: "2-digit", day: "2-digit",
+        hour: "2-digit", minute: "2-digit", hour12: false,
+      }) + " ET";
+    }
+
+    async function rpc(name, args = {}) {
+      const { data, error } = await sb.rpc(name, args);
+      if (error) throw error;
+      return data || [];
+    }
+
+    function showError(err) {
+      const el = $("error");
+      el.classList.toggle("hidden", !err);
+      el.textContent = err ? String(err.message || err) : "";
+    }
+
+    function showLoginError(err) {
+      const el = $("login-error");
+      el.classList.toggle("hidden", !err);
+      el.textContent = err ? String(err.message || err) : "";
+    }
+
+    function setAuthed(session) {
+      const authed = Boolean(session);
+      $("login-view").classList.toggle("hidden", authed);
+      $("app-view").classList.toggle("hidden", !authed);
+      if (authed) {
+        $("user-email").textContent = displayName(session.user?.email || "");
+      }
+    }
+
+    function renderMeta(batch) {
+      $("meta").innerHTML = `
+        <span>ops day <strong>${batch.subbatch_date}</strong></span>
+        <span>batch <strong>${batch.subbatch}</strong></span>
+        <span>snaps <strong>${batch.scrape_count}</strong></span>
+        <span>last scrape <strong>${toEt(batch.last_scraped_at)}</strong></span>
+      `;
+    }
+
+    function renderTiles(latestRows) {
+      $("tiles").innerHTML = latestRows.map((r) => {
+        const d = Number(r.delta_volume || 0);
+        const delta = d >= 0 ? `+${fmt(d)}` : fmt(d);
+        return `<div class="tile">
+          <div class="code">${r.city}</div>
+          <div class="vol">${fmt(r.total_volume)}</div>
+          <div class="delta">last Δ ${delta}</div>
+        </div>`;
+      }).join("");
+    }
+
+    function renderChart(series, topCities, metric) {
+      const yKey = metric === "delta" ? "delta_volume" : "total_volume";
+      const traces = topCities.map((city, i) => {
+        const rows = series
+          .filter((r) => r.city === city)
+          .sort((a, b) => new Date(a.scraped_at) - new Date(b.scraped_at));
+        return {
+          type: "scatter",
+          mode: "lines+markers",
+          name: city,
+          x: rows.map((r) => r.scraped_at),
+          y: rows.map((r) => r[yKey]),
+          line: { width: 2.4, color: COLORS[i % COLORS.length] },
+          marker: { size: 7 },
+        };
+      });
+      Plotly.newPlot("chart", traces, {
+        margin: { l: 50, r: 20, t: 20, b: 50 },
+        paper_bgcolor: "rgba(0,0,0,0)",
+        plot_bgcolor: "rgba(0,0,0,0)",
+        font: { family: "Outfit, sans-serif", color: "#dce6df" },
+        legend: { orientation: "h", y: 1.12 },
+        xaxis: {
+          title: "Scrape time",
+          gridcolor: "rgba(255,255,255,0.06)",
+          zeroline: false,
+        },
+        yaxis: {
+          title: metric === "delta" ? "Packages since previous scrape" : "Cumulative packages",
+          gridcolor: "rgba(255,255,255,0.06)",
+          zeroline: false,
+        },
+        hovermode: "x unified",
+      }, { displayModeBar: false, responsive: true });
+    }
+
+    let batches = [];
+
+    async function loadBatches() {
+      batches = await rpc("list_scrape_batches", { p_limit: 40 });
+      const sel = $("batch");
+      sel.innerHTML = batches.map((b, i) => {
+        const label = `${b.subbatch_date} · ${b.subbatch} · ${b.scrape_count} snaps · ${fmt(b.latest_total)}`;
+        return `<option value="${i}">${label}</option>`;
+      }).join("");
+    }
+
+    async function loadSeries() {
+      showError(null);
+      const batch = batches[Number($("batch").value)];
+      if (!batch) return;
+      renderMeta(batch);
+
+      let series = await rpc("city_volume_series", { p_subbatch: batch.subbatch });
+      series = series.filter((r) => r.city !== "Unmapped");
+      if (!series.length) {
+        $("tiles").innerHTML = "";
+        Plotly.purge("chart");
+        showError(new Error("No mapped city/hub rows for this batch."));
+        return;
+      }
+
+      const latestTs = series.reduce((m, r) => (r.scraped_at > m ? r.scraped_at : m), series[0].scraped_at);
+      const latest = series
+        .filter((r) => r.scraped_at === latestTs)
+        .sort((a, b) => b.total_volume - a.total_volume);
+      const topN = Number($("topn").value);
+      const topCities = latest.slice(0, topN).map((r) => r.city);
+
+      renderTiles(latest);
+      renderChart(series, topCities, $("metric").value);
+    }
+
+    async function bootApp() {
+      try {
+        await loadBatches();
+        await loadSeries();
+      } catch (err) {
+        showError(err);
+      }
+    }
+
+    $("batch").addEventListener("change", () => loadSeries().catch(showError));
+    $("metric").addEventListener("change", () => loadSeries().catch(showError));
+    $("topn").addEventListener("change", () => loadSeries().catch(showError));
+    $("reload").addEventListener("click", () => bootApp());
+
+    $("login-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      showLoginError(null);
+      const email = toAuthEmail($("username").value);
+      const password = $("password").value;
+      const { error } = await sb.auth.signInWithPassword({ email, password });
+      if (error) {
+        showLoginError(error);
+        return;
+      }
+    });
+
+    $("logout").addEventListener("click", async () => {
+      await sb.auth.signOut();
+    });
+
+    sb.auth.onAuthStateChange(async (_event, session) => {
+      setAuthed(session);
+      if (session) {
+        await bootApp();
+      } else {
+        batches = [];
+        $("tiles").innerHTML = "";
+        if (window.Plotly) Plotly.purge("chart");
+      }
+    });
+
+    sb.auth.getSession().then(({ data }) => {
+      setAuthed(data.session);
+      if (data.session) bootApp();
+    });
+  </script>
+</body>
+</html>

@@ -16,6 +16,35 @@ cp .env.example .env   # fill secrets
 python -m src.main --dry-run
 ```
 
+## City dashboard (login required)
+
+GitHub Pages (username/password):
+
+**https://yxwvwxy.github.io/sorting-database/**
+
+- Must sign in before data loads (`city_volume_series` / `list_scrape_batches` are `authenticated` only)
+- `last_mile` → city; `transit` → warehouse  
+- Source: [`docs/index.html`](docs/index.html) (mirrored from [`web/index.html`](web/index.html))
+
+Create a login user:
+
+```bash
+.venv/bin/python scripts/create_dashboard_user.py --username NAME --password 'your-password'
+```
+
+Local preview of the HTML (still needs a real Auth user):
+
+```bash
+.venv/bin/python -m http.server 8080 --directory docs
+# http://localhost:8080
+```
+
+Optional Streamlit (local only):
+
+```bash
+./scripts/run_dashboard.sh
+```
+
 ## Windows
 
 See [WINDOWS_SETUP.md](WINDOWS_SETUP.md).
