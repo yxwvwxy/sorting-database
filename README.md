@@ -20,11 +20,12 @@ python -m src.main --dry-run
 
 GitHub Pages (username/password):
 
-**https://yxwvwxy.github.io/sorting-database/**
+**https://yxwvwxy.github.io/sorting-city-dashboard/**
 
+- Hosted from public repo [`sorting-city-dashboard`](https://github.com/yxwvwxy/sorting-city-dashboard) (this scraper repo is private, so Pages can’t run here)
 - Must sign in before data loads (`city_volume_series` / `list_scrape_batches` are `authenticated` only)
 - `last_mile` → city; `transit` → warehouse  
-- Source: [`docs/index.html`](docs/index.html) (mirrored from [`web/index.html`](web/index.html))
+- Source: [`docs/index.html`](docs/index.html) / [`web/index.html`](web/index.html)
 
 Create a login user:
 
