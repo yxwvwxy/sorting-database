@@ -46,12 +46,21 @@ Optional Streamlit (local only):
 ./scripts/run_dashboard.sh
 ```
 
-## Windows
+## Windows runner + Mac editor
 
-See [WINDOWS_SETUP.md](WINDOWS_SETUP.md).
+Recommended: **Windows runs the schedule**; **Mac only edits + git push**.
+
+Full steps: [WINDOWS_SETUP.md](WINDOWS_SETUP.md)
+
+```powershell
+# On Windows after Mac pushes:
+powershell -ExecutionPolicy Bypass -File .\scripts\pull_windows_updates.ps1
+```
+
+Mac schedule (optional / backup only): [MAC_SETUP.md](MAC_SETUP.md) — disable it when Windows is primary.
 
 ## Batch resolution
 
 - **21:10 ET**: use saved batch (`.current-batch.json`), do not open Slot Assignment  
 - **From 21:30 ET**: poll Slot Assignment until Batch No changes; page value is source of truth  
-- Scrapes at **:10 / :30 / :50** each hour; each run inserts a full snapshot keyed by `scraped_at`
+- Scrapes at **:10 / :30 / :50** each hour; chute/feed every run; hourly = current hour each run + previous hour at **:10**; after an outage, backfill any missed completed hours

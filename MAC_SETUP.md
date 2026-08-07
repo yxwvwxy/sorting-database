@@ -2,6 +2,14 @@
 
 Runs at **:10 / :30 / :50** each hour via LaunchAgent. Same scraper as Windows; logs go to `logs/scrape-YYYYMMDD.log`.
 
+**If Windows is the primary runner**, uninstall this schedule so only one machine scrapes:
+
+```bash
+./scripts/uninstall_mac_schedule.sh
+```
+
+Edit code on Mac, push to GitHub; on Windows run `scripts\pull_windows_updates.ps1`. See [WINDOWS_SETUP.md](WINDOWS_SETUP.md).
+
 ## Setup
 
 1. Ensure `.venv` works and `local.env` / `.env` has `UNIUNI_*` + `SUPABASE_*`.

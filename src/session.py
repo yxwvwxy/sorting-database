@@ -35,8 +35,18 @@ class UniUniSession:
         )
         return job
 
-    def scrape(self, job: SubbatchJob) -> ScrapeResult:
-        return scrape_on_page(self.page, self.settings, job)
+    def scrape(
+        self,
+        job: SubbatchJob,
+        *,
+        finalized_hours: set[tuple[int, int, int, int]] | None = None,
+    ) -> ScrapeResult:
+        return scrape_on_page(
+            self.page,
+            self.settings,
+            job,
+            finalized_hours=finalized_hours,
+        )
 
 
 @contextmanager
