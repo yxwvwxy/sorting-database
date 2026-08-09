@@ -1,6 +1,7 @@
 .env
 local.env
 !.env.example
+dashboard-accounts.local.ini
 *.json
 !package.json
 !package-lock.json
