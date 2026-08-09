@@ -53,7 +53,7 @@ def open_uniuni_session(
             context_kwargs["storage_state"] = state_path
             print(f"Reusing saved UniMap session from {state_path}")
         else:
-            print("No saved UniMap session — will login if the portal asks.")
+            print("No saved UniMap session - will login if the portal asks.")
 
         context = browser.new_context(**context_kwargs)
         page = context.new_page()
@@ -66,8 +66,19 @@ def open_uniuni_session(
         try:
             yield session
         finally:
+            # Only persist a usable session — failed logins used to overwrite
+            # good cookies with a half-logged-in /main state.
             if state_path:
-                os.makedirs(os.path.dirname(state_path) or ".", exist_ok=True)
-                context.storage_state(path=state_path)
+                try:
+                    from .scraper import _portal_logged_in
+
+                    if not page.is_closed() and _portal_logged_in(page):
+                        os.makedirs(os.path.dirname(state_path) or ".", exist_ok=True)
+                        context.storage_state(path=state_path)
+                        print(f"Saved UniMap session to {state_path}")
+                    else:
+                        print("Skipped saving UniMap session (not fully logged in).")
+                except Exception as exc:
+                    print(f"Skipped saving UniMap session ({exc}).")
             context.close()
             browser.close()

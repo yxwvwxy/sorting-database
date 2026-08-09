@@ -52,16 +52,16 @@ def _ensure_logged_in_main(page: Page, settings: Settings) -> None:
         or not _portal_logged_in(page)
     )
     if needs_login:
-        print("UniMap session missing/expired — logging in with .env credentials...")
+        print("UniMap session missing/expired - logging in with .env credentials...")
         _login_with_credentials(page, settings)
         page.goto(MAIN_URL, wait_until="domcontentloaded", timeout=60_000)
         _dismiss_blocking_dialogs(page)
         page.wait_for_timeout(1_000)
     else:
-        print("Already logged in as nj600 session — skipping login.")
+        print("Already logged in as nj600 session - skipping login.")
 
     if _login_form_visible(page):
-        print("UniMap re-auth modal still open — filling password again...")
+        print("UniMap re-auth modal still open - filling password again...")
         _login_with_credentials(page, settings)
         page.goto(MAIN_URL, wait_until="domcontentloaded", timeout=60_000)
         _dismiss_blocking_dialogs(page)
@@ -243,14 +243,33 @@ def fetch_batch_on_page(
     )
     subbatch = _read_batch_no(slot_page)
     print(f"Read Batch No from page (no other clicks): {subbatch}")
-    print("Leaving Slot Assignment in this browser — next step is Sorting Production Analysis.")
+    print("Leaving Slot Assignment in this browser - next step is Sorting Production Analysis.")
+
+    # Prefer the original UniMap tab for Sorting Production Analysis. The Slot
+    # Assignment tile often opens a secondary page/tab that does not host the
+    # Streamlit "Query log" UI reliably after navigation.
+    main_page = page
+    if slot_page is not page:
+        try:
+            if not page.is_closed():
+                main_page = page
+            elif page.context.pages:
+                main_page = page.context.pages[0]
+        except Exception:
+            main_page = page.context.pages[0] if page.context.pages else slot_page
+        try:
+            if slot_page is not main_page and not slot_page.is_closed():
+                slot_page.close()
+        except Exception:
+            pass
+
     return (
         SubbatchJob(
             operation_date=operation_date_from_subbatch(subbatch),
             subbatch=subbatch,
             machine_id=machine_id,
         ),
-        slot_page,
+        main_page,
     )
 
 

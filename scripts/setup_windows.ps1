@@ -5,6 +5,9 @@ Write-Host "Creating venv..."
 python -m venv .venv
 & .\.venv\Scripts\python.exe -m pip install --upgrade pip
 & .\.venv\Scripts\pip.exe install -r requirements.txt
+# Install browsers to a stable user path (not Cursor temp cache).
+$env:PLAYWRIGHT_BROWSERS_PATH = Join-Path $env:LOCALAPPDATA "ms-playwright"
+[Environment]::SetEnvironmentVariable("PLAYWRIGHT_BROWSERS_PATH", $env:PLAYWRIGHT_BROWSERS_PATH, "User")
 & .\.venv\Scripts\python.exe -m playwright install chromium
 
 if (-not (Test-Path "logs")) { New-Item -ItemType Directory -Path "logs" | Out-Null }

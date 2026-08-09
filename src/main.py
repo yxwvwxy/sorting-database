@@ -93,7 +93,7 @@ def main(argv: list[str] | None = None) -> int:
     print(json.dumps(summary, indent=2))
 
     if args.dry_run:
-        print("Dry run complete — no Supabase writes.")
+        print("Dry run complete - no Supabase writes.")
         return 0
 
     validate_supabase_settings(settings)

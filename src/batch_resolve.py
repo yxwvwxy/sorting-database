@@ -1,12 +1,15 @@
 """Resolve which subbatch to scrape.
 
-Whatever Batch No Slot Assignment shows is the batch in use — do not assume the
-embedded YYYYMMDD must be operation_date-1.
+Agreed ops rules (America/New_York):
 
-From 21:30 ET, poll Slot Assignment every run until the Batch No changes from
-the pre-switch value. The new batch is stored under that evening window's
-operation date (window start day + 1), even if the ID digits are unusual
-(e.g. late switch at 1:10am showing ...062100 for an Aug 6 ops day).
+- 21:10 (21:00-21:29): never open Slot Assignment; use the saved batch.
+- From 21:30 until Slot Batch No changes from the pre-switch value:
+  every run opens Slot Assignment.
+  - still old -> scrape with the old batch; check again next run
+  - changed -> page value becomes this ops-day batch; no more Slot checks
+    until the next evening's 21:30
+- If a Slot check fails, the next run must try again (do not mark confirmed).
+- --refresh-batch adopts the live page Batch No outside the evening wait loop.
 """
 
 from __future__ import annotations
@@ -28,13 +31,21 @@ from .slot_assignment import fetch_batch_from_slot_assignment
 if TYPE_CHECKING:
     from .session import UniUniSession
 
+CONFIRMED_SOURCES = frozenset(
+    {
+        "slot_assignment",
+        "slot_assignment_switch",
+        "slot_assignment_refresh",
+    }
+)
+
 
 def switch_window_operation_date(now: datetime | None = None) -> date:
-    """Operation date for the active post-21:30 switch window.
+    """Ops date for the active post-21:30 switch window.
 
-    Aug 5 21:30 → Aug 6
-    Aug 6 01:10 (still waiting) → Aug 6
-    Aug 6 21:30 → Aug 7
+    Aug 5 21:30 -> Aug 6
+    Aug 6 01:10 (still waiting) -> Aug 6
+    Aug 6 21:30 -> Aug 7
     """
     current = _as_eastern(now)
     if current.hour > 21 or (current.hour == 21 and current.minute >= 30):
@@ -44,27 +55,41 @@ def switch_window_operation_date(now: datetime | None = None) -> date:
     return window_start + timedelta(days=1)
 
 
+def window_batch_confirmed(state: BatchState | None, window_ops: date) -> bool:
+    """True after Slot Batch No has switched for this ops-day window."""
+    if state is None or state.awaiting_from:
+        return False
+    if state.job.operation_date != window_ops:
+        return False
+    return (state.source or "") in CONFIRMED_SOURCES
+
+
 def should_poll_slot_assignment(
     now: datetime | None = None,
     *,
     state: BatchState | None,
 ) -> bool:
-    """Poll from 21:30 until the page Batch No changes; never at 21:10."""
+    """Whether this run must open Slot Assignment."""
     current = _as_eastern(now)
+    window_ops = switch_window_operation_date(now)
 
-    # 21:10 uses the saved batch only.
+    # 21:10 uses saved batch only.
     if current.hour == 21 and current.minute < 30:
         return False
 
-    # Already waiting for UniMap to flip — keep checking overnight if needed.
+    # Still waiting for the page Batch No to change (may continue overnight).
     if state and state.awaiting_from:
         return True
 
-    # Open a new evening switch window at/after 21:30.
+    if window_batch_confirmed(state, window_ops):
+        return False
+
+    # Evening open: every run from 21:30 until confirmed.
     if current.hour > 21 or (current.hour == 21 and current.minute >= 30):
         return True
 
-    return False
+    # Daytime catch-up: 21:30 was missed/skipped and this window is not confirmed.
+    return True
 
 
 def resolve_job(
@@ -107,8 +132,6 @@ def resolve_job(
             headless=headless,
             now=now,
             session=session,
-            # Mid-day --refresh-batch adopts the live Batch No; do not enter
-            # the 21:30 switch-waiting state (that would poll every later run).
             adopt_page_batch=refresh_batch
             and not should_poll_slot_assignment(now, state=None),
         )
@@ -125,7 +148,7 @@ def resolve_job(
     print(
         f"No saved batch yet; bootstrapped from clock: {fallback.subbatch} "
         f"(operation date {fallback.operation_date}). "
-        "Will poll Slot Assignment from next 21:30 ET until the batch switches."
+        "Will poll Slot Assignment from next 21:30 ET until Batch No changes."
     )
     return fallback
 
@@ -178,12 +201,16 @@ def _resolve_from_slot_assignment(
         )
         return job
 
-    # First poll of this evening window: lock the pre-switch batch + ops day.
+    # First poll of this window: remember the pre-switch Batch No.
     if previous and not awaiting_from:
         awaiting_from = previous
         window_ops = switch_window_operation_date(now)
+        print(
+            f"Slot poll start for ops {window_ops}: "
+            f"waiting for Batch No to change from {awaiting_from}."
+        )
 
-    # Page shows a different Batch No than before the window → switch complete.
+    # Switched: page value is the new ops-day batch.
     if awaiting_from and page_batch != awaiting_from:
         job = SubbatchJob(
             operation_date=window_ops,
@@ -197,12 +224,13 @@ def _resolve_from_slot_assignment(
             window_operation_date=None,
         )
         print(
-            f"Batch switched: {awaiting_from} → {page_batch} "
-            f"(operation date {window_ops}; using page Batch No as-is)"
+            f"Batch switched: {awaiting_from} -> {page_batch} "
+            f"(operation date {window_ops}). "
+            "No more Slot checks until next 21:30 ET."
         )
         return job
 
-    # Still the old Batch No → keep waiting; do not invent a new ID.
+    # Still old on the page: scrape old batch; check again next run.
     if awaiting_from and page_batch == awaiting_from:
         job = SubbatchJob(
             operation_date=previous_ops or page_job.operation_date,
@@ -217,12 +245,12 @@ def _resolve_from_slot_assignment(
         )
         print(
             f"Slot Assignment still shows {page_batch}; "
-            f"waiting for switch (target operation date {window_ops}). "
+            f"keep using old batch (target ops {window_ops}). "
             "Will check again next run."
         )
         return job
 
-    # No prior saved batch: trust the page value.
+    # No prior saved batch: adopt page value for this window.
     job = SubbatchJob(
         operation_date=switch_window_operation_date(now),
         subbatch=page_batch,
@@ -231,6 +259,7 @@ def _resolve_from_slot_assignment(
     save_batch_state(job, source="slot_assignment")
     print(
         f"Loaded batch from Slot Assignment: {job.subbatch} "
-        f"(operation date {job.operation_date})"
+        f"(operation date {job.operation_date}). "
+        "No more Slot checks until next 21:30 ET."
     )
     return job
