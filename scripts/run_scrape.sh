@@ -31,8 +31,19 @@ trap cleanup EXIT
 {
   echo "===== $(date '+%Y-%m-%d %H:%M:%S %Z') start ====="
   set +e
-  "$ROOT/.venv/bin/python" -m src.main "$@"
-  code=$?
+  code=1
+  for attempt in 1 2; do
+    if [[ "$attempt" -gt 1 ]]; then
+      echo "Whole-run retry ${attempt}/2 after failure (fresh browser in 25s)..."
+      sleep 25
+    fi
+    "$ROOT/.venv/bin/python" -m src.main "$@"
+    code=$?
+    if [[ "$code" -eq 0 ]]; then
+      break
+    fi
+    echo "Run attempt ${attempt}/2 failed (exit ${code})."
+  done
   set -e
   echo "===== $(date '+%Y-%m-%d %H:%M:%S %Z') done (exit ${code}) ====="
   exit "$code"

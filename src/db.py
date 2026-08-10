@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+import re
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from supabase import Client, create_client
 
-from .config import Settings, SubbatchJob
-from .scraper import ScrapeResult
+from .config import ET, Settings, SubbatchJob
+from .scraper import ScrapeResult, hour_bucket_key
 
 
 def create_supabase_client(settings: Settings) -> Client:
@@ -21,6 +22,58 @@ def _as_utc_iso(value: datetime) -> str:
     else:
         value = value.astimezone(timezone.utc)
     return value.isoformat()
+
+
+def _parse_db_timestamp(value: str | datetime) -> datetime:
+    if isinstance(value, datetime):
+        return value
+    text = str(value).strip().replace("Z", "+00:00")
+    # Postgres may emit 1–6 fractional digits; Python 3.9 fromisoformat is picky.
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError:
+        pass
+    match = re.fullmatch(
+        r"(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2})(\.\d+)?([+-]\d{2}:\d{2})?",
+        text,
+    )
+    if not match:
+        raise ValueError(f"Unrecognized timestamp: {value!r}")
+    base, frac, offset = match.group(1), match.group(2) or "", match.group(3) or ""
+    if frac:
+        digits = frac[1:][:6].ljust(6, "0")
+        frac = f".{digits}"
+    normalized = f"{base.replace(' ', 'T')}{frac}{offset}"
+    return datetime.fromisoformat(normalized)
+
+
+def fetch_finalized_hourly_buckets(client: Client, subbatch: str) -> set[tuple[int, int, int, int]]:
+    """Hours that already have a capture taken after that clock hour closed (ET).
+
+    Used so a resumed scrape only backfills completed hours that were missed
+    during an outage, instead of rewriting every frozen hour every run.
+    """
+    response = (
+        client.table("hourly_throughput")
+        .select("bucket_time, scraped_at")
+        .eq("subbatch_id", subbatch)
+        .limit(10000)
+        .execute()
+    )
+    finalized: set[tuple[int, int, int, int]] = set()
+    for row in response.data or []:
+        bucket = _parse_db_timestamp(row["bucket_time"])
+        if bucket.tzinfo is not None:
+            bucket = bucket.astimezone(ET).replace(tzinfo=None)
+        scraped_at = _parse_db_timestamp(row["scraped_at"])
+        if scraped_at.tzinfo is None:
+            scraped_at = scraped_at.replace(tzinfo=timezone.utc)
+        else:
+            scraped_at = scraped_at.astimezone(timezone.utc)
+        hour_end_utc = (bucket.replace(tzinfo=ET) + timedelta(hours=1)).astimezone(timezone.utc)
+        if scraped_at >= hour_end_utc:
+            finalized.add(hour_bucket_key(bucket))
+    return finalized
 
 
 def save_scrape_result(

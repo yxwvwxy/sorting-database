@@ -46,12 +46,28 @@ Optional Streamlit (local only):
 ./scripts/run_dashboard.sh
 ```
 
-## Windows
+## Windows runner + Mac editor
 
-See [WINDOWS_SETUP.md](WINDOWS_SETUP.md).
+**Windows** 跑定时；**Mac** 改代码后 push。说明：[WINDOWS_SETUP.md](WINDOWS_SETUP.md) · [MAC_SETUP.md](MAC_SETUP.md)
+
+```bash
+# Mac — 推送
+cd ~/Projects/Sorting\ Database
+git checkout main && git pull origin main
+# …edit…
+git add -A && git commit -m "your message" && git push origin main
+```
+
+```powershell
+# Windows — 拉取
+cd "$HOME\Projects\Sorting Database"
+git checkout main
+git pull origin main
+# 或: powershell -ExecutionPolicy Bypass -File .\scripts\pull_windows_updates.ps1
+```
 
 ## Batch resolution
 
 - **21:10 ET**: use saved batch (`.current-batch.json`), do not open Slot Assignment  
 - **From 21:30 ET**: poll Slot Assignment until Batch No changes; page value is source of truth  
-- Scrapes at **:10 / :30 / :50** each hour; each run inserts a full snapshot keyed by `scraped_at`
+- Scrapes at **:10 / :30 / :50** each hour; chute/feed every run; hourly = current hour updates each run; completed hours finalize once; outage backfill for missed completed hours

@@ -130,10 +130,16 @@
       background: linear-gradient(160deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015));
       padding: 0.7rem 0.8rem;
       transition: border-color 160ms ease, transform 160ms ease;
+      cursor: pointer;
     }
     .tile:hover {
       border-color: rgba(240,162,2,0.45);
       transform: translateY(-1px);
+    }
+    .tile.selected {
+      border-color: rgba(240,162,2,0.75);
+      box-shadow: inset 0 0 0 1px rgba(240,162,2,0.28);
+      background: linear-gradient(160deg, rgba(240,162,2,0.12), rgba(255,255,255,0.02));
     }
     .tile .code {
       font-family: "IBM Plex Mono", monospace;
@@ -152,13 +158,51 @@
       font-size: 0.72rem;
       color: var(--muted);
     }
+    .tile .breakdown {
+      margin-top: 0.4rem;
+      padding-top: 0.35rem;
+      border-top: 1px solid var(--line);
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 0.68rem;
+      color: #c5d0c8;
+      line-height: 1.45;
+    }
+    .city-modules { display: grid; gap: 1.15rem; }
+    .city-module-title {
+      margin: 0 0 0.55rem;
+      font-size: 0.85rem;
+      color: var(--muted);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
     .error {
       color: #ff8f8f;
       white-space: pre-wrap;
       font-family: "IBM Plex Mono", monospace;
       font-size: 0.85rem;
     }
-    #chart, #feed-chart { width: 100%; height: 460px; }
+    #chart, #feed-chart, #hourly-chart { width: 100%; height: 460px; }
+    .hourly-log {
+      margin: 0 0 1.25rem;
+    }
+    .hourly-log h2 {
+      margin-bottom: 0.35rem;
+    }
+    .hourly-stats {
+      margin: 0 0 0.55rem;
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 0.84rem;
+      color: #b7c4bc;
+      line-height: 1.55;
+    }
+    .hourly-stats strong {
+      color: var(--ink);
+      font-weight: 500;
+    }
+    .hourly-log .panel {
+      margin-bottom: 0;
+      background: rgba(0, 0, 0, 0.32);
+    }
     .hidden { display: none !important; }
     .topbar {
       display: flex;
@@ -199,14 +243,34 @@
     }
     .login-card button[type="submit"] { width: 100%; padding: 0.7rem; }
     .section {
-      margin-top: 2rem;
-      padding-top: 1.5rem;
-      border-top: 1px solid var(--line);
-    }
-    .section:first-of-type {
-      margin-top: 0;
+      margin-top: 1.25rem;
       padding-top: 0;
       border-top: 0;
+    }
+    .app-tabs {
+      display: flex;
+      gap: 0.45rem;
+      margin: 0 0 0.35rem;
+      flex-wrap: wrap;
+    }
+    .app-tab {
+      min-width: auto;
+      padding: 0.5rem 0.95rem;
+      background: transparent;
+      border: 1px solid var(--line);
+      color: var(--muted);
+      font-weight: 500;
+    }
+    .app-tab:hover {
+      border-color: rgba(240,162,2,0.45);
+      color: var(--ink);
+      filter: none;
+    }
+    .app-tab.active {
+      background: var(--amber);
+      border-color: var(--amber);
+      color: #1a1200;
+      font-weight: 600;
     }
     .deck-block { margin-bottom: 1rem; }
     .deck-label {
@@ -253,7 +317,7 @@
     }
     .feed-chart-wrap {
       display: grid;
-      grid-template-columns: 1fr 140px;
+      grid-template-columns: 1fr 168px;
       gap: 0.75rem;
       align-items: stretch;
     }
@@ -276,13 +340,27 @@
       text-align: center;
       margin-bottom: 0.25rem;
     }
+    #hour-buttons {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+      flex: 1;
+    }
+    #hour-list {
+      display: flex;
+      flex-direction: column-reverse;
+      gap: 0.35rem;
+      margin-top: auto;
+    }
     .hour-btn {
       width: 100%;
       min-width: 0;
-      padding: 0.4rem 0.35rem;
-      font-size: 0.72rem;
+      padding: 0.45rem 0.35rem;
+      font-size: 0.68rem;
       font-family: "IBM Plex Mono", monospace;
       font-weight: 500;
+      line-height: 1.25;
+      white-space: normal;
       background: transparent;
       border: 1px solid var(--line);
       color: #d7e0d9;
@@ -291,6 +369,10 @@
       border-color: var(--amber);
       color: var(--amber);
       background: rgba(240,162,2,0.12);
+    }
+    .hour-btn.partial::after {
+      content: " ·";
+      color: var(--muted);
     }
     .stack-detail {
       margin: 0.75rem 0 0;
@@ -330,17 +412,16 @@
       </div>
     </div>
 
+    <nav id="app-tabs" class="app-tabs hidden" aria-label="Dashboard sections">
+      <button type="button" class="app-tab" data-tab="city" id="tab-city">City / hub</button>
+      <button type="button" class="app-tab" data-tab="feed" id="tab-feed">Feed &amp; hourly</button>
+    </nav>
+
     <section id="city-section" class="section hidden">
-      <h2>City / hub growth</h2>
+      <h2>City / hub</h2>
       <div class="controls">
         <label>Batch / ops day
           <select id="batch"></select>
-        </label>
-        <label>Chart metric
-          <select id="metric">
-            <option value="total">Cumulative total</option>
-            <option value="delta">20-min increment</option>
-          </select>
         </label>
         <label>&nbsp;
           <button id="reload" type="button">Refresh</button>
@@ -348,14 +429,16 @@
       </div>
       <div id="meta" class="meta"></div>
       <p id="error" class="error hidden"></p>
-      <div class="panel"><div id="chart"></div></div>
       <h2>Latest city / hub totals</h2>
-      <p class="caption">Sorted by current cumulative volume. Delta is the latest 20-minute change.</p>
-      <div id="tiles" class="grid"></div>
+      <p class="caption">Click a city to plot its growth. Default chart: EWR + CT + AT. ATL = ATL+PGV+FAY; LAX = LAX+SJC+SEA.</p>
+      <div id="tiles" class="city-modules"></div>
+      <h2 style="margin-top:1.35rem">Growth chart</h2>
+      <p id="chart-caption" class="caption">Showing EWR, CT, AT</p>
+      <div class="panel"><div id="chart"></div></div>
     </section>
 
     <section id="feed-section" class="section hidden">
-      <h2>Feed station hourly</h2>
+      <h2>Feed &amp; hourly</h2>
       <div class="controls">
         <label>Batch / ops day
           <select id="feed-batch"></select>
@@ -367,6 +450,15 @@
       <div id="feed-meta" class="meta"></div>
       <p id="feed-error" class="error hidden"></p>
 
+      <div class="hourly-log">
+        <h2>Hourly throughput</h2>
+        <div id="hourly-stats" class="hourly-stats">
+          <div>Total Volume: <strong id="hourly-total">—</strong></div>
+          <div>Hourly Average: <strong id="hourly-avg">—</strong></div>
+        </div>
+        <div class="panel"><div id="hourly-chart"></div></div>
+      </div>
+
       <div class="deck-block">
         <p class="deck-label">Upper deck</p>
         <div id="upper-cards" class="station-grid"></div>
@@ -376,11 +468,11 @@
         <div id="lower-cards" class="station-grid"></div>
       </div>
 
-      <p class="caption">Stacked bars = hourly increment (:30 → next :30 ET). Click a stack for details. Click a time on the right to set the stack baseline; click chart blank space to reset to the first :30.</p>
+      <p class="caption">All Day = one stack per period, oldest at the x-axis. Tabs show time ranges (normally :30–:30; gaps/opening use actual scrape span). Click a stack for details.</p>
       <div class="feed-chart-wrap">
         <div class="panel"><div id="feed-chart"></div></div>
         <div class="hour-axis">
-          <div class="axis-title">Hour start (ET)</div>
+          <div class="axis-title">Period (ET)</div>
           <div id="hour-buttons"></div>
         </div>
       </div>
@@ -393,10 +485,33 @@
     const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhsbGltbWd4a3R0anphaWtpbXR1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc0ODkwODcsImV4cCI6MjA5MzA2NTA4N30.ULSAIUVpnnCIPUYexpdUh6dxYe40e9LHSmG-7QcAZL0";
     const USERNAME_DOMAIN = "sorting-db.local";
     const COLORS = ["#F0A202","#3DDC97","#4CC9F0","#F72585","#B8F2E6","#FF6B35","#7BDFF2","#F9C74F","#90BE6D","#577590","#F8961E","#43AA8B","#F94144","#277DA1","#F3722C"];
+    const HOVERLABEL = {
+      bgcolor: "rgba(248,250,249,0.98)",
+      bordercolor: "rgba(20,28,26,0.35)",
+      font: { family: "Outfit, sans-serif", size: 13, color: "#1a221e" },
+    };
     const STATION_ORDER = [
       "Upper station 1","Upper station 2","Upper station 3","Upper station 4","Upper station 5",
       "Lower station 1","Lower station 2","Lower station 3","Lower station 4","Lower station 5",
     ];
+    const CITY_BLOCK_7PM = ["ALB", "SWF", "SYR", "RIC", "PVD2"];
+    const CITY_BLOCK_9PM = [
+      "ANT", "BK", "DCA", "BTO", "BOS", "MHT", "PVD1", "PWM", "RDU", "GSO",
+      "CLT", "MDT", "CT", "AT", "AVP", "BUF", "ROC", "ORF", "DOV", "PHL", "PIT",
+    ];
+    const CITY_BLOCK_REGION = ["ATL", "MIA", "ORD", "DFW", "LAX"];
+    const CITY_BLOCK_NYC = ["EWR", "JFK"];
+    const ATL_PARTS = ["ATL", "PGV", "FAY"];
+    const LAX_PARTS = ["LAX", "SJC", "SEA"];
+    const CITY_ROLLED_PARTS = new Set(["PGV", "FAY", "SJC", "SEA"]);
+    const CITY_RESERVED = new Set([
+      ...CITY_BLOCK_7PM,
+      ...CITY_BLOCK_9PM,
+      ...CITY_BLOCK_REGION,
+      ...CITY_BLOCK_NYC,
+      ...CITY_ROLLED_PARTS,
+    ]);
+    const CITY_CHART_DEFAULT = ["EWR", "CT", "AT"];
 
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     const $ = (id) => document.getElementById(id);
@@ -405,11 +520,15 @@
     let roles = [];
     let batches = [];
     let feedBatches = [];
-    let feedHours = []; // {startMs, endMs, label, shortLabel}
-    let feedHourly = []; // {station, startMs, endMs, label, delta, endVolume}
-    let feedLatest = []; // {station, volume}
-    let baselineStartMs = null;
+    let feedLayers = []; // per-station hourly totals
+    let feedHourTabs = []; // :30 hour buckets
+    let feedLatest = [];
+    let feedMode = "all"; // "all" | hourStartMs number
     let feedPlotReady = false;
+    let hourlyPlotReady = false;
+    let cityChartModel = { series: [], cities: [] };
+    let cityChartSelection = CITY_CHART_DEFAULT.slice();
+    let activeTab = "city";
 
     function normalizeUsername(username) {
       return String(username || "").trim().toLowerCase().replace(/\s+/g, ".");
@@ -440,6 +559,42 @@
 
     function hasRole(name) {
       return roles.includes(name);
+    }
+
+    function resizeVisibleCharts() {
+      if (!window.Plotly) return;
+      requestAnimationFrame(() => {
+        try {
+          if (activeTab === "city" && hasRole("city")) Plotly.Plots.resize("chart");
+          if (activeTab === "feed" && hasRole("feed")) {
+            Plotly.Plots.resize("hourly-chart");
+            Plotly.Plots.resize("feed-chart");
+          }
+        } catch (_) { /* chart may not exist yet */ }
+      });
+    }
+
+    function setActiveTab(tab) {
+      const canCity = hasRole("city");
+      const canFeed = hasRole("feed");
+      if (tab === "city" && !canCity) tab = canFeed ? "feed" : "city";
+      if (tab === "feed" && !canFeed) tab = canCity ? "city" : "feed";
+      activeTab = tab;
+
+      $("city-section").classList.toggle("hidden", !(canCity && tab === "city"));
+      $("feed-section").classList.toggle("hidden", !(canFeed && tab === "feed"));
+
+      const tabCity = $("tab-city");
+      const tabFeed = $("tab-feed");
+      if (tabCity) {
+        tabCity.classList.toggle("hidden", !canCity);
+        tabCity.classList.toggle("active", tab === "city");
+      }
+      if (tabFeed) {
+        tabFeed.classList.toggle("hidden", !canFeed);
+        tabFeed.classList.toggle("active", tab === "feed");
+      }
+      resizeVisibleCharts();
     }
 
     function etParts(iso, opts) {
@@ -483,14 +638,207 @@
 
     function formatHour12(iso) {
       const p = etParts(iso, { hour: "numeric", minute: "2-digit", hour12: true });
-      const hour = String(p.hour);
-      const minute = p.minute;
-      const dayPeriod = String(p.dayPeriod || "").toLowerCase();
-      return `${hour}:${minute}${dayPeriod}`;
+      return `${p.hour}:${p.minute}${String(p.dayPeriod || "").toLowerCase()}`;
     }
 
     function hourRangeLabel(startIso, endIso) {
       return `${formatHour12(startIso)}-${formatHour12(endIso)}`;
+    }
+
+    /** Regular :30 hour bucket for a scrape end (7:30→6:30, 7:50→7:30). */
+    function regularHalfHourBucketMs(iso) {
+      const etMs = new Date(iso).getTime();
+      const minute = Number(etParts(iso, { minute: "2-digit", hour12: false }).minute);
+      const deltaMin = minute > 30 ? (minute - 30) : (minute + 30);
+      const d = new Date(iso);
+      return etMs - deltaMin * 60 * 1000 - d.getSeconds() * 1000 - d.getMilliseconds();
+    }
+
+    /** Next ET :30 mark strictly after iso. */
+    function nextEtHalfHourMs(iso) {
+      const t = new Date(iso).getTime();
+      for (let add = 1; add <= 90; add += 1) {
+        const cand = t + add * 60 * 1000;
+        const minute = Number(etParts(new Date(cand).toISOString(), { minute: "2-digit", hour12: false }).minute);
+        if (minute === 30) {
+          const sec = Number(etParts(new Date(cand).toISOString(), { second: "2-digit", hour12: false }).second || 0);
+          return cand - sec * 1000 - new Date(cand).getMilliseconds();
+        }
+      }
+      return t + 60 * 60 * 1000;
+    }
+
+    /**
+     * Period start for a scrape ending at iso.
+     * Opening period = first scrape → next :30 inclusive (tab labeled as first scrape time).
+     * Later periods use normal :30 buckets.
+     * Note: :30 scrapes are :30:xx, so compare with a small grace past exact :30:00.
+     */
+    function hourBucketStartMs(iso, firstIso) {
+      const t = new Date(iso).getTime();
+      const firstMs = new Date(firstIso).getTime();
+      const openingEndMs = nextEtHalfHourMs(firstIso);
+      if (t <= openingEndMs + 90 * 1000) return firstMs;
+      return regularHalfHourBucketMs(iso);
+    }
+
+    function addOneHourMs(startMs) {
+      return startMs + 60 * 60 * 1000;
+    }
+
+    function shortLabelFromMs(ms) {
+      return formatHour12(new Date(ms).toISOString());
+    }
+
+    /** bucket_time is ET wall clock stored as UTC — label from UTC parts. */
+    function bucketWallLabel(iso) {
+      const d = new Date(iso);
+      const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+      const dd = String(d.getUTCDate()).padStart(2, "0");
+      const hh = String(d.getUTCHours()).padStart(2, "0");
+      const mi = String(d.getUTCMinutes()).padStart(2, "0");
+      return `${mm}-${dd} ${hh}:${mi}`;
+    }
+
+    /** Comparable ET wall-clock ms (bucket encoding: wall time as UTC). */
+    function bucketWallMs(iso) {
+      const d = new Date(iso);
+      return Date.UTC(
+        d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(),
+        d.getUTCHours(), d.getUTCMinutes(), d.getUTCSeconds()
+      );
+    }
+
+    /** Latest scrape instant → same ET wall-clock encoding as bucket_time. */
+    function scrapedEtWallMs(iso) {
+      const p = etParts(iso, {
+        year: "numeric", month: "2-digit", day: "2-digit",
+        hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+      });
+      return Date.UTC(
+        Number(p.year), Number(p.month) - 1, Number(p.day),
+        Number(p.hour), Number(p.minute), Number(p.second || 0)
+      );
+    }
+
+    /**
+     * Hourly-average denominator (ET wall hours):
+     * - 9–10pm (bucket hour 21): always 0.5 when that hour is already past
+     * - other completed hours: 1.0 each
+     * - current in-progress hour: minutes into the hour from latest scrape / 60
+     */
+    function hourlyAverageElapsedHours(rows, lastScrapedIso) {
+      const p = etParts(lastScrapedIso, {
+        year: "numeric", month: "2-digit", day: "2-digit",
+        hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+      });
+      const curY = Number(p.year);
+      const curM = Number(p.month) - 1;
+      const curD = Number(p.day);
+      const curH = Number(p.hour);
+      const curMin = Number(p.minute) + Number(p.second || 0) / 60;
+      const currentBucketMs = Date.UTC(curY, curM, curD, curH, 0, 0);
+
+      let hours = 0;
+      for (const row of rows) {
+        const bMs = bucketWallMs(row.bucket_time);
+        const b = new Date(bMs);
+        const bucketHour = b.getUTCHours();
+        if (bMs === currentBucketMs) {
+          hours += Math.max(curMin, 1) / 60;
+        } else if (bucketHour === 21) {
+          hours += 0.5; // 9–10pm opening hour
+        } else {
+          hours += 1;
+        }
+      }
+      return Math.max(hours, 1 / 60);
+    }
+
+    function renderHourlyThroughput(rows) {
+      if (!rows.length) {
+        $("hourly-total").textContent = "—";
+        $("hourly-avg").textContent = "—";
+        Plotly.purge("hourly-chart");
+        hourlyPlotReady = false;
+        return;
+      }
+      const total = Number(rows[rows.length - 1].cumulative_volume || 0);
+      const lastIso = rows[0].last_scraped_at || rows[rows.length - 1].scraped_at;
+      const elapsedHours = hourlyAverageElapsedHours(rows, lastIso);
+      const avg = total / elapsedHours;
+      $("hourly-total").textContent = fmt(total);
+      $("hourly-avg").textContent = fmt(Math.round(avg));
+
+      const x = rows.map((r) => bucketWallLabel(r.bucket_time));
+      const hourly = rows.map((r) => Number(r.hourly_volume || 0));
+      const cumulative = rows.map((r) => Number(r.cumulative_volume || 0));
+      const traces = [
+        {
+          type: "bar",
+          name: "Hourly volume",
+          x,
+          y: hourly,
+          marker: { color: "#b7a7d9" },
+          hovertemplate: "%{x}<br>Hourly: %{y:,}<extra></extra>",
+        },
+        {
+          type: "scatter",
+          mode: "lines+markers",
+          name: "Cumulative volume",
+          x,
+          y: cumulative,
+          yaxis: "y2",
+          line: { color: "#7dffb3", width: 2 },
+          marker: { size: 5, color: "#7dffb3" },
+          hovertemplate: "%{x}<br>Cumulative: %{y:,}<extra></extra>",
+        },
+      ];
+      const layout = {
+        margin: { l: 55, r: 55, t: 16, b: 56 },
+        paper_bgcolor: "rgba(0,0,0,0)",
+        plot_bgcolor: "rgba(0,0,0,0)",
+        font: { family: "Outfit, sans-serif", color: "#dce6df" },
+        showlegend: true,
+        legend: { orientation: "h", y: -0.18, x: 0.5, xanchor: "center" },
+        dragmode: false,
+        barmode: "overlay",
+        xaxis: {
+          type: "category",
+          tickangle: -40,
+          // Show every hour so gaps (e.g. missing 6pm) are obvious; denser labels OK.
+          dtick: 1,
+          gridcolor: "rgba(255,255,255,0.06)",
+          zeroline: false,
+          fixedrange: true,
+          showspikes: false,
+        },
+        yaxis: {
+          title: "",
+          gridcolor: "rgba(255,255,255,0.06)",
+          zeroline: false,
+          fixedrange: true,
+          showspikes: false,
+          tickformat: "~s",
+        },
+        yaxis2: {
+          overlaying: "y",
+          side: "right",
+          title: "",
+          showgrid: false,
+          zeroline: false,
+          fixedrange: true,
+          showspikes: false,
+          tickformat: "~s",
+        },
+        hovermode: "x unified",
+        hoverlabel: HOVERLABEL,
+      };
+      const opts = { displayModeBar: false, responsive: true, scrollZoom: false, doubleClick: false };
+      const plotPromise = hourlyPlotReady
+        ? Plotly.react("hourly-chart", traces, layout, opts)
+        : Plotly.newPlot("hourly-chart", traces, layout, opts);
+      plotPromise.then(() => { hourlyPlotReady = true; });
     }
 
     async function rpc(name, args = {}) {
@@ -516,8 +864,20 @@
       if (!authed) return;
       $("user-email").textContent = displayName(session.user);
       roles = userRoles(session.user);
-      $("city-section").classList.toggle("hidden", !hasRole("city"));
-      $("feed-section").classList.toggle("hidden", !hasRole("feed"));
+      const canCity = hasRole("city");
+      const canFeed = hasRole("feed");
+      // Only show the tab bar when the user can switch (both roles).
+      $("app-tabs").classList.toggle("hidden", !(canCity && canFeed));
+      if (canCity && canFeed) {
+        setActiveTab(activeTab === "feed" ? "feed" : "city");
+      } else if (canFeed) {
+        setActiveTab("feed");
+      } else if (canCity) {
+        setActiveTab("city");
+      } else {
+        $("city-section").classList.add("hidden");
+        $("feed-section").classList.add("hidden");
+      }
     }
 
     function renderMeta(batch, elId) {
@@ -529,20 +889,157 @@
       `;
     }
 
-    function renderTiles(latestRows) {
-      $("tiles").innerHTML = latestRows.map((r) => {
-        const d = Number(r.delta_volume || 0);
-        const delta = d >= 0 ? `+${fmt(d)}` : fmt(d);
-        return `<div class="tile">
-          <div class="code">${r.city}</div>
-          <div class="vol">${fmt(r.total_volume)}</div>
-          <div class="delta">last Δ ${delta}</div>
-        </div>`;
-      }).join("");
+    function cityRowMap(latestRows) {
+      const map = new Map();
+      for (const r of latestRows) map.set(r.city, r);
+      return map;
     }
 
-    function renderChart(series, cities, metric) {
-      const yKey = metric === "delta" ? "delta_volume" : "total_volume";
+    function sumCityParts(map, parts) {
+      let total = 0;
+      let delta = 0;
+      const breakdown = parts.map((code) => {
+        const r = map.get(code);
+        const total_volume = r ? Number(r.total_volume || 0) : 0;
+        const delta_volume = r ? Number(r.delta_volume || 0) : 0;
+        total += total_volume;
+        delta += delta_volume;
+        return { city: code, total_volume, delta_volume };
+      });
+      return { total_volume: total, delta_volume: delta, breakdown };
+    }
+
+    function tileHtml(code, totalVolume, deltaVolume, breakdown) {
+      const d = Number(deltaVolume || 0);
+      const delta = d >= 0 ? `+${fmt(d)}` : fmt(d);
+      const selected = cityChartSelection.includes(code) ? " selected" : "";
+      const detail = breakdown
+        ? `<div class="breakdown">${breakdown.map((b) => `${b.city} ${fmt(b.total_volume)}`).join("<br>")}</div>`
+        : "";
+      return `<div class="tile${selected}" data-city="${code}" role="button" tabindex="0" title="Show ${code} growth">
+          <div class="code">${code}</div>
+          <div class="vol">${fmt(totalVolume)}</div>
+          <div class="delta">last Δ ${delta}</div>
+          ${detail}
+        </div>`;
+    }
+
+    function syncTileSelection() {
+      document.querySelectorAll("#tiles .tile[data-city]").forEach((el) => {
+        el.classList.toggle("selected", cityChartSelection.includes(el.dataset.city));
+      });
+      const cap = $("chart-caption");
+      if (cap) {
+        cap.textContent = cityChartSelection.length
+          ? `Showing ${cityChartSelection.join(", ")}`
+          : "Select a city tile to plot growth";
+      }
+    }
+
+    function applyCityChart() {
+      if (!cityChartModel.series.length) {
+        Plotly.purge("chart");
+        syncTileSelection();
+        return;
+      }
+      const available = new Set(cityChartModel.cities);
+      const cities = cityChartSelection.filter((c) => available.has(c));
+      renderChart(cityChartModel.series, cities);
+      syncTileSelection();
+    }
+
+    function renderTiles(latestRows) {
+      const map = cityRowMap(latestRows);
+      const leftovers = [...map.keys()]
+        .filter((c) => !CITY_RESERVED.has(c))
+        .sort((a, b) => a.localeCompare(b));
+
+      const atl = sumCityParts(map, ATL_PARTS);
+      const lax = sumCityParts(map, LAX_PARTS);
+
+      const module = (title, body) => `
+        <div class="city-module">
+          <p class="city-module-title">${title}</p>
+          <div class="grid">${body}</div>
+        </div>`;
+
+      const block7 = CITY_BLOCK_7PM.map((code) => {
+        const r = map.get(code);
+        return tileHtml(code, r ? r.total_volume : 0, r ? r.delta_volume : 0);
+      }).join("");
+
+      const block9 = [...CITY_BLOCK_9PM, ...leftovers].map((code) => {
+        const r = map.get(code);
+        return tileHtml(code, r ? r.total_volume : 0, r ? r.delta_volume : 0);
+      }).join("");
+
+      const blockRegion = CITY_BLOCK_REGION.map((code) => {
+        if (code === "ATL") return tileHtml("ATL", atl.total_volume, atl.delta_volume, atl.breakdown);
+        if (code === "LAX") return tileHtml("LAX", lax.total_volume, lax.delta_volume, lax.breakdown);
+        const r = map.get(code);
+        return tileHtml(code, r ? r.total_volume : 0, r ? r.delta_volume : 0);
+      }).join("");
+
+      const blockNyc = CITY_BLOCK_NYC.map((code) => {
+        const r = map.get(code);
+        return tileHtml(code, r ? r.total_volume : 0, r ? r.delta_volume : 0);
+      }).join("");
+
+      $("tiles").innerHTML = [
+        module("7pm 转运", block7),
+        module("9pm 转运", block9),
+        module("大区", blockRegion),
+        module("EWR / JFK", blockNyc),
+      ].join("");
+    }
+
+    function aggregateCitySeries(series, parts, name) {
+      const byTs = new Map();
+      for (const r of series) {
+        if (!parts.includes(r.city)) continue;
+        const key = r.scraped_at;
+        if (!byTs.has(key)) {
+          byTs.set(key, {
+            subbatch: r.subbatch,
+            subbatch_date: r.subbatch_date,
+            scraped_at: r.scraped_at,
+            city: name,
+            total_volume: 0,
+            delta_volume: 0,
+          });
+        }
+        const row = byTs.get(key);
+        row.total_volume += Number(r.total_volume || 0);
+        row.delta_volume += Number(r.delta_volume || 0);
+      }
+      return [...byTs.values()].sort((a, b) => new Date(a.scraped_at) - new Date(b.scraped_at));
+    }
+
+    function buildCityChartModel(series) {
+      const hide = new Set(CITY_ROLLED_PARTS);
+      const base = series.filter((r) => !hide.has(r.city) && r.city !== "ATL" && r.city !== "LAX");
+      const atl = aggregateCitySeries(series, ATL_PARTS, "ATL");
+      const lax = aggregateCitySeries(series, LAX_PARTS, "LAX");
+      const merged = [...base, ...atl, ...lax];
+      const present = new Set(merged.map((r) => r.city));
+      const leftovers = [...present]
+        .filter((c) => !CITY_RESERVED.has(c) && c !== "ATL" && c !== "LAX")
+        .sort((a, b) => a.localeCompare(b));
+      const order = [
+        ...CITY_BLOCK_7PM,
+        ...CITY_BLOCK_9PM,
+        ...leftovers,
+        ...CITY_BLOCK_REGION,
+        ...CITY_BLOCK_NYC,
+      ].filter((c) => present.has(c));
+      return { series: merged, cities: order };
+    }
+
+    function renderChart(series, cities) {
+      if (!cities.length) {
+        Plotly.purge("chart");
+        return;
+      }
       const traces = cities.map((city, i) => {
         const rows = series
           .filter((r) => r.city === city)
@@ -552,7 +1049,7 @@
           mode: "lines+markers",
           name: city,
           x: rows.map((r) => toEtPlotTime(r.scraped_at)),
-          y: rows.map((r) => r[yKey]),
+          y: rows.map((r) => Number(r.total_volume || 0)),
           line: { width: 2.4, color: COLORS[i % COLORS.length] },
           marker: { size: 7 },
           hovertemplate: `%{x} ET<br>${city}: %{y:,}<extra></extra>`,
@@ -564,20 +1061,26 @@
         plot_bgcolor: "rgba(0,0,0,0)",
         font: { family: "Outfit, sans-serif", color: "#dce6df" },
         legend: { orientation: "h", y: 1.12 },
+        dragmode: false,
         xaxis: {
           title: "Scrape time (ET)",
           type: "date",
           tickformat: "%m/%d %H:%M",
           gridcolor: "rgba(255,255,255,0.06)",
           zeroline: false,
+          fixedrange: true,
+          showspikes: false,
         },
         yaxis: {
-          title: metric === "delta" ? "Packages since previous scrape" : "Cumulative packages",
+          title: "Cumulative packages",
           gridcolor: "rgba(255,255,255,0.06)",
           zeroline: false,
+          fixedrange: true,
+          showspikes: false,
         },
-        hovermode: "x unified",
-      }, { displayModeBar: false, responsive: true });
+        hovermode: "closest",
+        hoverlabel: HOVERLABEL,
+      }, { displayModeBar: false, responsive: true, scrollZoom: false, doubleClick: false });
     }
 
     async function loadBatchesInto(selectId, storeKey) {
@@ -592,6 +1095,11 @@
         const label = `${b.subbatch_date} · ${b.subbatch} · ${b.scrape_count} snaps · ${fmt(b.latest_total)}`;
         return `<option value="${i}">${label}</option>`;
       }).join("");
+      // Prefer a batch with enough scrapes for charts (latest with >= 2).
+      if (storeKey === "feed" && list.length) {
+        const idx = list.findIndex((b) => Number(b.scrape_count || 0) >= 2);
+        sel.value = String(idx >= 0 ? idx : 0);
+      }
     }
 
     async function loadCitySeries() {
@@ -603,16 +1111,28 @@
       series = series.filter((r) => r.city !== "Unmapped");
       if (!series.length) {
         $("tiles").innerHTML = "";
+        cityChartModel = { series: [], cities: [] };
         Plotly.purge("chart");
+        syncTileSelection();
         showError("error", new Error("No mapped city/hub rows for this batch."));
         return;
       }
       const latestTs = series.reduce((m, r) => (r.scraped_at > m ? r.scraped_at : m), series[0].scraped_at);
-      const latest = series
-        .filter((r) => r.scraped_at === latestTs)
-        .sort((a, b) => b.total_volume - a.total_volume);
+      const latest = series.filter((r) => r.scraped_at === latestTs);
+      cityChartModel = buildCityChartModel(series);
       renderTiles(latest);
-      renderChart(series, latest.map((r) => r.city), $("metric").value);
+      applyCityChart();
+    }
+
+    function onCityTileActivate(city) {
+      if (!city) return;
+      // Click same sole selection again → restore default EWR+CT+AT
+      if (cityChartSelection.length === 1 && cityChartSelection[0] === city) {
+        cityChartSelection = CITY_CHART_DEFAULT.slice();
+      } else {
+        cityChartSelection = [city];
+      }
+      applyCityChart();
     }
 
     function buildFeedModel(rows) {
@@ -621,46 +1141,104 @@
         if (!byStation.has(r.station_name)) byStation.set(r.station_name, []);
         byStation.get(r.station_name).push(r);
       }
+      for (const list of byStation.values()) {
+        list.sort((a, b) => new Date(a.scraped_at) - new Date(b.scraped_at));
+      }
 
       const latest = STATION_ORDER.map((name) => {
-        const list = (byStation.get(name) || []).slice().sort((a, b) => new Date(a.scraped_at) - new Date(b.scraped_at));
+        const list = byStation.get(name) || [];
         const last = list[list.length - 1];
         return { station: name, volume: last ? Number(last.volume || 0) : 0 };
       });
 
-      const hourly = [];
-      const hourMap = new Map();
+      // First scrape across stations (batch start); opening tab uses this timestamp.
+      let firstIso = null;
       for (const name of STATION_ORDER) {
-        const bounds = (byStation.get(name) || [])
-          .filter((r) => r.is_hour_boundary)
-          .sort((a, b) => new Date(a.scraped_at) - new Date(b.scraped_at));
-        for (let i = 1; i < bounds.length; i += 1) {
-          const prev = bounds[i - 1];
-          const cur = bounds[i];
-          const startMs = new Date(prev.scraped_at).getTime();
-          const endMs = new Date(cur.scraped_at).getTime();
-          const label = hourRangeLabel(prev.scraped_at, cur.scraped_at);
-          const shortLabel = formatHour12(prev.scraped_at);
+        const list = byStation.get(name) || [];
+        if (!list.length) continue;
+        if (!firstIso || new Date(list[0].scraped_at) < new Date(firstIso)) {
+          firstIso = list[0].scraped_at;
+        }
+      }
+      const firstMs = firstIso ? new Date(firstIso).getTime() : null;
+      const secondMs = firstIso ? nextEtHalfHourMs(firstIso) : null;
+
+      // Aggregate scrape→scrape deltas into one total per station per period.
+      const hourTotals = new Map(); // key: `${station}|${hourStartMs}` → delta
+      const hourMeta = new Map(); // hourStartMs → tab meta
+      for (const name of STATION_ORDER) {
+        const list = byStation.get(name) || [];
+        for (let i = 1; i < list.length; i += 1) {
+          const prev = list[i - 1];
+          const cur = list[i];
+          const hourStartMs = hourBucketStartMs(cur.scraped_at, firstIso);
           const delta = Math.max(0, Number(cur.volume || 0) - Number(prev.volume || 0));
-          hourly.push({
-            station: name,
-            startMs,
-            endMs,
-            label,
-            shortLabel,
-            delta,
-            endVolume: Number(cur.volume || 0),
-            startIso: prev.scraped_at,
-            endIso: cur.scraped_at,
-          });
-          if (!hourMap.has(startMs)) {
-            hourMap.set(startMs, { startMs, endMs, label, shortLabel, startIso: prev.scraped_at, endIso: cur.scraped_at });
+          const key = `${name}|${hourStartMs}`;
+          hourTotals.set(key, (hourTotals.get(key) || 0) + delta);
+          const prevMs = new Date(prev.scraped_at).getTime();
+          const curMs = new Date(cur.scraped_at).getTime();
+
+          if (!hourMeta.has(hourStartMs)) {
+            const isOpening = firstMs != null && hourStartMs === firstMs;
+            const endMs = isOpening ? secondMs : addOneHourMs(hourStartMs);
+            hourMeta.set(hourStartMs, {
+              startMs: hourStartMs,
+              endMs,
+              actualStartMs: prevMs,
+              actualEndMs: curMs,
+              complete: false,
+              opening: isOpening,
+            });
+          }
+          const tab = hourMeta.get(hourStartMs);
+          tab.actualStartMs = Math.min(tab.actualStartMs, prevMs);
+          tab.actualEndMs = Math.max(tab.actualEndMs, curMs);
+          if (tab.opening) {
+            if (curMs >= secondMs - 60 * 1000) tab.complete = true;
+          } else {
+            const minute = Number(etParts(cur.scraped_at, { minute: "2-digit", hour12: false }).minute);
+            if (minute >= 25 && minute <= 40) tab.complete = true;
           }
         }
       }
 
-      const hours = [...hourMap.values()].sort((a, b) => a.startMs - b.startMs);
-      return { latest, hourly, hours };
+      const hourTabs = [...hourMeta.values()].sort((a, b) => a.startMs - b.startMs);
+      for (const tab of hourTabs) {
+        if (hourTabs.some((h) => h.startMs > tab.startMs)) tab.complete = true;
+        const nominalStart = tab.opening ? firstMs : tab.startMs;
+        const nominalEnd = tab.opening ? secondMs : addOneHourMs(tab.startMs);
+        const nominalSpanMin = (nominalEnd - nominalStart) / 60_000;
+        const actualSpanMin = (tab.actualEndMs - tab.actualStartMs) / 60_000;
+        // Normal closed :30–:30 (or opening that landed on the :30) → nominal range.
+        // Gaps / incomplete / odd spans → actual scrape-to-scrape range.
+        const isSpecial = tab.opening
+          || !tab.complete
+          || actualSpanMin > nominalSpanMin + 15
+          || tab.actualStartMs < nominalStart - 5 * 60_000;
+        const labelStart = isSpecial ? tab.actualStartMs : nominalStart;
+        const labelEnd = isSpecial ? tab.actualEndMs : nominalEnd;
+        const range = `${shortLabelFromMs(labelStart)}–${shortLabelFromMs(labelEnd)}`;
+        tab.shortLabel = range;
+        tab.label = range;
+        tab.special = isSpecial;
+      }
+
+      // One layer per station per hour (used by chart).
+      const layers = [];
+      for (const tab of hourTabs) {
+        for (const name of STATION_ORDER) {
+          const delta = hourTotals.get(`${name}|${tab.startMs}`) || 0;
+          layers.push({
+            station: name,
+            hourStartMs: tab.startMs,
+            label: tab.label,
+            shortLabel: tab.shortLabel,
+            delta,
+          });
+        }
+      }
+
+      return { latest, layers, hourTabs };
     }
 
     function renderStationCards(latest) {
@@ -677,43 +1255,84 @@
       $("lower-cards").innerHTML = latest.slice(5, 10).map(card).join("");
     }
 
+    function visibleLayers() {
+      if (feedMode === "all") return feedLayers.slice();
+      const startMs = Number(feedMode);
+      return feedLayers.filter((l) => l.hourStartMs === startMs);
+    }
+
+    /** Hour keys for stacks: All Day = each hour; hour tab = that one hour only. */
+    function visibleHourKeys() {
+      if (feedMode === "all") {
+        return feedHourTabs
+          .slice()
+          .sort((a, b) => a.startMs - b.startMs) // oldest first → bottom of stack
+          .map((h) => ({
+            hourStartMs: h.startMs,
+            label: h.label,
+            shortLabel: h.shortLabel,
+          }));
+      }
+      const tab = feedHourTabs.find((h) => h.startMs === Number(feedMode));
+      if (!tab) return [];
+      return [{ hourStartMs: tab.startMs, label: tab.label, shortLabel: tab.shortLabel }];
+    }
+
     function renderHourButtons() {
       const box = $("hour-buttons");
-      box.innerHTML = feedHours.map((h) => {
-        const active = baselineStartMs === h.startMs ? "active" : "";
-        return `<button type="button" class="hour-btn ${active}" data-start="${h.startMs}">${h.shortLabel}</button>`;
+      const allActive = feedMode === "all" ? "active" : "";
+      const hourBtns = feedHourTabs.map((h) => {
+        const active = feedMode === h.startMs ? "active" : "";
+        const partial = h.complete ? "" : "partial";
+        return `<button type="button" class="hour-btn ${active} ${partial}" data-mode="${h.startMs}">${h.shortLabel}</button>`;
       }).join("");
-      box.querySelectorAll("button").forEach((btn) => {
+      box.innerHTML = `
+        <button type="button" class="hour-btn ${allActive}" data-mode="all">All Day</button>
+        <div id="hour-list">${hourBtns}</div>
+      `;
+      box.querySelectorAll("button[data-mode]").forEach((btn) => {
         btn.addEventListener("click", (event) => {
           event.stopPropagation();
-          baselineStartMs = Number(btn.dataset.start);
-          renderFeedChart();
+          const mode = btn.dataset.mode;
+          feedMode = mode === "all" ? "all" : Number(mode);
+          $("stack-detail").classList.add("hidden");
           renderHourButtons();
+          renderFeedChart();
         });
       });
     }
 
     function renderFeedChart() {
-      const hours = feedHours.filter((h) => baselineStartMs == null || h.startMs >= baselineStartMs);
-      const visibleHourly = feedHourly.filter((h) => baselineStartMs == null || h.startMs >= baselineStartMs);
-      const totals = STATION_ORDER.map((station) => {
-        const rows = visibleHourly.filter((r) => r.station === station);
-        return rows.reduce((s, r) => s + r.delta, 0);
-      });
+      const keys = visibleHourKeys();
+      const layers = visibleLayers();
+      if (!keys.length) {
+        feedPlotReady = false;
+        Plotly.purge("feed-chart");
+        $("feed-chart").innerHTML = `<div style="padding:2rem;color:#9aa8a0;font-family:IBM Plex Mono,monospace;font-size:0.9rem;">
+          Need at least 2 scrapes in this batch to build stacks.<br/>
+          Station cards above still show the latest cumulative totals.
+        </div>`;
+        return;
+      }
 
-      const traces = hours.map((hour, i) => {
+      const totals = STATION_ORDER.map((station) => (
+        layers.filter((r) => r.station === station).reduce((s, r) => s + r.delta, 0)
+      ));
+
+      // One trace per hour; oldest first ⇒ closest to x-axis.
+      const traces = keys.map((key, i) => {
         const y = STATION_ORDER.map((station) => {
-          const hit = visibleHourly.find((r) => r.station === station && r.startMs === hour.startMs);
+          const hit = layers.find((r) => r.station === station && r.hourStartMs === key.hourStartMs);
           return hit ? hit.delta : 0;
         });
         const customdata = STATION_ORDER.map((station) => {
-          const hit = visibleHourly.find((r) => r.station === station && r.startMs === hour.startMs);
-          return hit ? [hit.label, hit.delta] : [hour.label, 0];
+          const hit = layers.find((r) => r.station === station && r.hourStartMs === key.hourStartMs);
+          return hit ? [hit.label, hit.delta] : [key.label, 0];
         });
-        const isTop = i === hours.length - 1;
+        const isTop = i === keys.length - 1;
         return {
           type: "bar",
-          name: hour.shortLabel,
+          name: key.shortLabel,
           x: STATION_ORDER,
           y,
           customdata,
@@ -731,18 +1350,30 @@
         paper_bgcolor: "rgba(0,0,0,0)",
         plot_bgcolor: "rgba(0,0,0,0)",
         font: { family: "Outfit, sans-serif", color: "#dce6df" },
-        legend: { orientation: "h", y: 1.15 },
+        legend: { orientation: "h", y: 1.15, traceorder: "normal" },
+        dragmode: false,
         xaxis: {
           tickangle: -25,
           gridcolor: "rgba(255,255,255,0.04)",
+          fixedrange: true,
+          showspikes: false,
         },
         yaxis: {
           title: "Packages",
           gridcolor: "rgba(255,255,255,0.06)",
           zeroline: false,
+          fixedrange: true,
+          showspikes: false,
         },
+        hovermode: "closest",
+        hoverlabel: HOVERLABEL,
       };
-      const opts = { displayModeBar: false, responsive: true };
+      const opts = { displayModeBar: false, responsive: true, scrollZoom: false, doubleClick: false };
+      // Ensure container is a clean Plotly target after empty-state HTML.
+      if (!$("feed-chart").classList.contains("js-plotly-plot")) {
+        feedPlotReady = false;
+        $("feed-chart").innerHTML = "";
+      }
       const plotPromise = feedPlotReady
         ? Plotly.react("feed-chart", traces, layout, opts)
         : Plotly.newPlot("feed-chart", traces, layout, opts);
@@ -767,7 +1398,7 @@
             const onBar = t.closest?.(".point, .bars, path.point");
             if (onBar) return;
             if (t.classList?.contains("bg") || t.classList?.contains("nsewdrag") || t.classList?.contains("draglayer")) {
-              baselineStartMs = feedHours[0]?.startMs ?? null;
+              feedMode = "all";
               $("stack-detail").classList.add("hidden");
               renderHourButtons();
               renderFeedChart();
@@ -784,19 +1415,28 @@
       if (!batch) return;
       renderMeta(batch, "feed-meta");
       const rows = await rpc("feed_station_series", { p_subbatch: batch.subbatch });
+      let hourlyRows = [];
+      try {
+        hourlyRows = await rpc("hourly_throughput_series", { p_subbatch: batch.subbatch });
+      } catch (hourlyErr) {
+        console.error("hourly_throughput_series failed", hourlyErr);
+        showError("feed-error", hourlyErr);
+      }
+      renderHourlyThroughput(hourlyRows || []);
       if (!rows.length) {
         $("upper-cards").innerHTML = "";
         $("lower-cards").innerHTML = "";
         $("hour-buttons").innerHTML = "";
         Plotly.purge("feed-chart");
+        feedPlotReady = false;
         showError("feed-error", new Error("No feed station rows for this batch."));
         return;
       }
       const model = buildFeedModel(rows);
       feedLatest = model.latest;
-      feedHourly = model.hourly;
-      feedHours = model.hours;
-      baselineStartMs = feedHours[0]?.startMs ?? null;
+      feedLayers = model.layers;
+      feedHourTabs = model.hourTabs;
+      feedMode = "all";
       renderStationCards(feedLatest);
       renderHourButtons();
       renderFeedChart();
@@ -818,29 +1458,45 @@
       }
     }
 
-    $("batch").addEventListener("change", () => loadCitySeries().catch((e) => showError("error", e)));
-    $("metric").addEventListener("change", () => loadCitySeries().catch((e) => showError("error", e)));
+    $("batch").addEventListener("change", () => {
+      cityChartSelection = CITY_CHART_DEFAULT.slice();
+      loadCitySeries().catch((e) => showError("error", e));
+    });
     $("reload").addEventListener("click", () => {
+      cityChartSelection = CITY_CHART_DEFAULT.slice();
       loadBatchesInto("batch", "city").then(loadCitySeries).catch((e) => showError("error", e));
+    });
+    $("app-tabs").addEventListener("click", (event) => {
+      const btn = event.target.closest(".app-tab[data-tab]");
+      if (!btn || btn.classList.contains("hidden")) return;
+      setActiveTab(btn.dataset.tab);
+    });
+    $("tiles").addEventListener("click", (event) => {
+      const tile = event.target.closest(".tile[data-city]");
+      if (!tile || !$("city-section").contains(tile)) return;
+      onCityTileActivate(tile.dataset.city);
+    });
+    $("tiles").addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      const tile = event.target.closest(".tile[data-city]");
+      if (!tile) return;
+      event.preventDefault();
+      onCityTileActivate(tile.dataset.city);
     });
     $("feed-batch").addEventListener("change", () => loadFeedSeries().catch((e) => showError("feed-error", e)));
     $("feed-reload").addEventListener("click", () => {
       loadBatchesInto("feed-batch", "feed").then(loadFeedSeries).catch((e) => showError("feed-error", e));
     });
 
-    // Click blank area beside chart / hour axis container to reset baseline
     document.addEventListener("click", (event) => {
       const feedSection = $("feed-section");
       if (feedSection.classList.contains("hidden")) return;
       if (event.target.closest("#hour-buttons") || event.target.closest("#stack-detail")) return;
-      if (event.target.closest(".feed-chart-wrap") && !event.target.closest(".point, .trace, path, .bars")) {
-        // handled cautiously in plot click; also allow clicking hour-axis title area
-        if (event.target.classList.contains("axis-title") || event.target.classList.contains("hour-axis")) {
-          baselineStartMs = feedHours[0]?.startMs ?? null;
-          $("stack-detail").classList.add("hidden");
-          renderHourButtons();
-          renderFeedChart();
-        }
+      if (event.target.classList.contains("axis-title") || event.target.classList.contains("hour-axis")) {
+        feedMode = "all";
+        $("stack-detail").classList.add("hidden");
+        renderHourButtons();
+        renderFeedChart();
       }
     });
 
@@ -865,13 +1521,22 @@
         roles = [];
         batches = [];
         feedBatches = [];
+        cityChartModel = { series: [], cities: [] };
+        cityChartSelection = CITY_CHART_DEFAULT.slice();
+        activeTab = "city";
+        $("app-tabs").classList.add("hidden");
         $("tiles").innerHTML = "";
         $("upper-cards").innerHTML = "";
         $("lower-cards").innerHTML = "";
+        $("hourly-total").textContent = "—";
+        $("hourly-avg").textContent = "—";
         if (window.Plotly) {
           Plotly.purge("chart");
           Plotly.purge("feed-chart");
+          Plotly.purge("hourly-chart");
         }
+        feedPlotReady = false;
+        hourlyPlotReady = false;
       }
     });
 

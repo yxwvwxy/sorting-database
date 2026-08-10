@@ -5,12 +5,14 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from datetime import datetime
 
 from dotenv import load_dotenv
 
 from .batch_resolve import resolve_job
-from .config import Settings, validate_supabase_settings, validate_uniuni_login_settings
-from .db import create_supabase_client, save_scrape_result
+from .config import ET, Settings, validate_supabase_settings, validate_uniuni_login_settings
+from .db import create_supabase_client, fetch_finalized_hourly_buckets, save_scrape_result
+from .scraper import hour_bucket_key
 from .session import open_uniuni_session
 
 
@@ -52,6 +54,11 @@ def main(argv: list[str] | None = None) -> int:
     settings = Settings.from_env()
     validate_uniuni_login_settings(settings)
 
+    client = None
+    if not args.dry_run:
+        validate_supabase_settings(settings)
+        client = create_supabase_client(settings)
+
     # One browser for the whole run: reuse nj600 session; if Slot Assignment is
     # needed first, navigate that same session to Sorting Production Analysis.
     with open_uniuni_session(settings, headless=not args.headed) as session:
@@ -68,8 +75,20 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Operation date: {job.operation_date}")
         print(f"Subbatch: {job.subbatch} | Machine: {job.machine_id}")
 
-        result = session.scrape(job)
+        finalized_hours = None
+        if client is not None:
+            finalized_hours = fetch_finalized_hourly_buckets(client, job.subbatch)
+            print(f"Finalized hourly buckets already in DB: {len(finalized_hours)}")
 
+        result = session.scrape(job, finalized_hours=finalized_hours)
+
+    now_et = datetime.now(ET)
+    current_key = hour_bucket_key(now_et.replace(minute=0, second=0, microsecond=0))
+    backfilled = [
+        row.bucket_time.isoformat(sep=" ")
+        for row in result.hourly
+        if hour_bucket_key(row.bucket_time) != current_key
+    ]
     summary = {
         "operation_date": job.operation_date.isoformat(),
         "subbatch": job.subbatch,
@@ -78,13 +97,20 @@ def main(argv: list[str] | None = None) -> int:
         "chute_rows": len(result.chutes),
         "feed_station_rows": len(result.feed_stations),
         "scraped_at": result.scraped_at.isoformat(),
+        "hourly_note": (
+            "current hour updates every scrape; completed hours written once when finalized "
+            "(or backfilled after an outage)"
+            if result.hourly
+            else "no matching hourly buckets in chart CSV"
+        ),
+        "hourly_backfill": backfilled,
         "hourly_sample": [
             {
                 "bucket_time": row.bucket_time.isoformat(sep=" "),
                 "hourly_volume": row.hourly_volume,
                 "cumulative_volume": row.cumulative_volume,
             }
-            for row in result.hourly[:3]
+            for row in result.hourly[:5]
         ],
         "chute_sample": [
             {"chute_id": row.chute_id, "volume": row.volume} for row in result.chutes[:5]
@@ -96,8 +122,7 @@ def main(argv: list[str] | None = None) -> int:
         print("Dry run complete - no Supabase writes.")
         return 0
 
-    validate_supabase_settings(settings)
-    client = create_supabase_client(settings)
+    assert client is not None
     save_scrape_result(client, job, result)
     print(f"Saved scrape snapshot to Supabase (scraped_at={result.scraped_at.isoformat()}).")
     return 0

@@ -1,36 +1,58 @@
-# macOS local scrape (every 20 minutes)
+# macOS：改代码（Windows 跑定时）
 
-Runs at **:10 / :30 / :50** each hour via LaunchAgent. Same scraper as Windows; logs go to `logs/scrape-YYYYMMDD.log`.
+**Windows** 跑 :10/:30/:50 scrape；**Mac** 只编辑 + git push。
 
-## Setup
+Mac 路径：`~/Projects/Sorting Database`
 
-1. Ensure `.venv` works and `local.env` / `.env` has `UNIUNI_*` + `SUPABASE_*`.
-2. Set Mac timezone to **Eastern** (System Settings → General → Date & Time) so schedule matches ops ET.
-3. Install the schedule:
+---
+
+## 日常同步
+
+### Mac 推送
+
+```bash
+cd ~/Projects/Sorting\ Database
+git checkout main
+git pull origin main
+# …改代码…
+git add -A
+git commit -m "your message"
+git push origin main
+```
+
+### Windows 拉取（另一台）
+
+```powershell
+cd "$HOME\Projects\Sorting Database"
+git checkout main
+git pull origin main
+```
+
+或：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\pull_windows_updates.ps1
+```
+
+完整 Windows 说明：[WINDOWS_SETUP.md](WINDOWS_SETUP.md)
+
+---
+
+## 停掉 Mac 定时
+
+```bash
+cd ~/Projects/Sorting\ Database
+./scripts/uninstall_mac_schedule.sh
+```
+
+---
+
+## 可选：Mac 自己当 scrape 备份机
+
+一般不需要。同一时间只开一台定时。
 
 ```bash
 chmod +x scripts/*.sh
 ./scripts/install_mac_schedule.sh
-```
-
-4. Optional smoke test (runs immediately, does not wait for :10/:30/:50):
-
-```bash
-./scripts/run_scrape.sh
-# or
-launchctl kickstart -k "gui/$(id -u)/com.sortingdatabase.scrape"
-```
-
-## Notes
-
-- Headless by default (no browser window).
-- If a run is still going, the next trigger skips (`logs/scrape.lock`).
-- Session reuse: `.uniuni-auth-state.json` (login only when expired).
-- First Playwright run may need Accessibility / Screen Recording / Automation prompts — approve once while logged in at the Mac GUI.
-- Keep the Mac awake around scrape times (or disable sleep while plugged in).
-
-## Uninstall
-
-```bash
-./scripts/uninstall_mac_schedule.sh
+./scripts/run_scrape.sh   # 试跑
 ```

@@ -10,11 +10,11 @@ from datetime import date, datetime, timezone
 
 from playwright.sync_api import Download, Frame, Page
 
-from .config import Settings, SubbatchJob
+from .config import ET, Settings, SubbatchJob
 
 ANALYSIS_URL = "https://dispatch.uniuni.com/sorting-production-analysis"
 QUERY_LOG_PATTERN = re.compile(r"^query log$", re.I)
-DOWNLOAD_CHART_PATTERN = re.compile(r"download chart data", re.I)
+DOWNLOAD_CHART_PATTERN = re.compile(r"download chart data|下载图表数据", re.I)
 FEED_STATION_ORDER = [
     "Upper station 1",
     "Upper station 2",
@@ -89,15 +89,18 @@ def _is_login_page(page: Page) -> bool:
 
 
 def _dismiss_portal_dialogs(page: Page) -> None:
-    """Close UniMap release-note dialogs that block clicks."""
+    """Close UniMap release-note / modal dialogs that block clicks."""
     page.evaluate(
         """() => {
+          const re = /got it|^ok$|^close$|确认|确定|关闭|知道了/i;
           for (const button of document.querySelectorAll('button')) {
-            if (/got it/i.test(button.innerText)) {
+            const text = (button.innerText || '').trim();
+            if (re.test(text)) {
               button.click();
-              return;
+              return true;
             }
           }
+          return false;
         }"""
     )
     page.wait_for_timeout(500)
@@ -365,6 +368,10 @@ def _fill_analysis_inputs(target: Page | Frame, job: SubbatchJob) -> None:
     inputs.nth(1).fill(str(job.machine_id))
 
 
+def _chart_ready(page: Page) -> bool:
+    return page.get_by_text(DOWNLOAD_CHART_PATTERN).count() > 0
+
+
 def _click_query_log(target: Page | Frame, page: Page) -> None:
     if not _has_query_log_button(target):
         raise RuntimeError("Query log button not found on Sorting Production Analysis page.")
@@ -377,12 +384,65 @@ def _click_query_log(target: Page | Frame, page: Page) -> None:
     query_button.first.click(force=True)
 
 
+def _wait_for_chart(page: Page, *, timeout_ms: int = 90_000) -> None:
+    page.get_by_text(DOWNLOAD_CHART_PATTERN).wait_for(timeout=timeout_ms)
+
+
 def _submit_query(page: Page, job: SubbatchJob) -> Page | Frame:
     target = _analysis_target(page)
     _fill_analysis_inputs(target, job)
     _click_query_log(target, page)
-    page.get_by_text(re.compile(r"download chart data|下载图表数据", re.I)).wait_for(timeout=120_000)
+    _wait_for_chart(page)
     return target
+
+
+def _force_fresh_login(page: Page, settings: Settings) -> None:
+    """Drop cookies and log in again — recovers kicked / half-dead sessions."""
+    print("Query/page stuck — forcing fresh UniMap login...")
+    try:
+        page.context.clear_cookies()
+    except Exception:
+        pass
+    page.goto("https://dispatch.uniuni.com/login", wait_until="domcontentloaded", timeout=60_000)
+    _dismiss_portal_dialogs(page)
+    _login_with_credentials(page, settings)
+    page.goto(ANALYSIS_URL, wait_until="domcontentloaded", timeout=60_000)
+    _dismiss_portal_dialogs(page)
+    if _is_login_page(page) or _login_form_visible(page):
+        raise RuntimeError("Fresh UniMap login failed after query timeout.")
+    page.locator("input").first.wait_for(state="visible", timeout=60_000)
+
+
+def _submit_query_with_recovery(page: Page, settings: Settings, job: SubbatchJob) -> Page | Frame:
+    """Submit Query Log; on chart timeout reload / re-login and retry."""
+    last_error: Exception | None = None
+    for attempt in range(1, 4):
+        try:
+            _dismiss_portal_dialogs(page)
+            if _is_login_page(page) or _login_form_visible(page):
+                _force_fresh_login(page, settings)
+            elif attempt > 1:
+                print(f"Retry {attempt}/3: reloading Sorting Production Analysis...")
+                page.goto(ANALYSIS_URL, wait_until="domcontentloaded", timeout=60_000)
+                _dismiss_portal_dialogs(page)
+                page.locator("input").first.wait_for(state="visible", timeout=60_000)
+            return _submit_query(page, job)
+        except Exception as exc:
+            last_error = exc
+            print(f"Query attempt {attempt}/3 failed: {exc}")
+            if attempt >= 3:
+                break
+            # Second failure → assume session is bad (e.g. kicked elsewhere).
+            if attempt >= 2 or _is_login_page(page) or _login_form_visible(page):
+                try:
+                    _force_fresh_login(page, settings)
+                except Exception as login_exc:
+                    print(f"Fresh login after failure also failed: {login_exc}")
+            else:
+                _dismiss_portal_dialogs(page)
+                page.wait_for_timeout(2_000)
+    assert last_error is not None
+    raise last_error
 
 
 def _parse_hourly_timestamp(raw: str, reference_year: int) -> datetime:
@@ -436,6 +496,77 @@ def _download_hourly_csv(page: Page, operation_date: date) -> list[HourlyRow]:
     download: Download = download_info.value
     csv_text = open(download.path(), encoding="utf-8-sig").read()
     return _parse_hourly_csv_text(csv_text, operation_date)
+
+
+def hour_bucket_key(value: datetime) -> tuple[int, int, int, int]:
+    """Stable key for a clock-hour bucket (naive ET wall)."""
+    bucket = value.replace(tzinfo=None) if value.tzinfo else value
+    return (bucket.year, bucket.month, bucket.day, bucket.hour)
+
+
+def _current_hour_bucket_start(now_et: datetime) -> datetime:
+    """Clock-hour bucket for the in-progress :00–:00 hour (naive ET wall)."""
+    current = now_et.astimezone(ET) if now_et.tzinfo else now_et.replace(tzinfo=ET)
+    return current.replace(minute=0, second=0, microsecond=0, tzinfo=None)
+
+
+def _as_naive_et_bucket(value: datetime) -> datetime:
+    bucket = value.replace(tzinfo=None) if value.tzinfo else value
+    return bucket.replace(minute=0, second=0, microsecond=0)
+
+
+def _select_hour_row(hourly: list[HourlyRow], target: datetime) -> HourlyRow | None:
+    """Find one CSV row matching a clock-hour bucket start."""
+    target_key = hour_bucket_key(target)
+    for row in hourly:
+        if hour_bucket_key(row.bucket_time) == target_key:
+            return row
+    return None
+
+
+def _capture_hourly_throughput(
+    page: Page,
+    job: SubbatchJob,
+    *,
+    finalized_hours: set[tuple[int, int, int, int]] | None = None,
+) -> list[HourlyRow]:
+    """Select hourly rows to persist for this scrape.
+
+    - Always write/update the in-progress current clock hour (:10/:30/:50).
+    - Completed hours: write only if not yet finalized in DB (normal close on
+      the next scrape after the hour ends, or multi-hour backfill after outage).
+    - Once finalized, a completed hour is never rewritten.
+    """
+    now_et = datetime.now(ET)
+    all_hourly = _download_hourly_csv(page, job.operation_date)
+    current_start = _current_hour_bucket_start(now_et)
+
+    selected: list[HourlyRow] = []
+    seen: set[tuple[int, int, int, int]] = set()
+
+    def add_row(row: HourlyRow | None) -> None:
+        if row is None:
+            return
+        key = hour_bucket_key(row.bucket_time)
+        if key in seen:
+            return
+        seen.add(key)
+        selected.append(row)
+
+    # Completed hours: write once when not yet finalized (normal :10 close, or
+    # backfill after an outage). Never rewrite a frozen hour.
+    for row in all_hourly:
+        bucket = _as_naive_et_bucket(row.bucket_time)
+        if bucket >= current_start:
+            continue
+        key = hour_bucket_key(bucket)
+        if finalized_hours is None or key not in finalized_hours:
+            add_row(row)
+
+    # Current in-progress hour: update every :10/:30/:50.
+    add_row(_select_hour_row(all_hourly, current_start))
+    selected.sort(key=lambda row: _as_naive_et_bucket(row.bucket_time))
+    return selected
 
 
 def _parse_chutes(target: Page | Frame) -> list[ChuteRow]:
@@ -506,12 +637,18 @@ def _launch_browser(playwright, *, headless: bool):
     return playwright.chromium.launch(**launch_kwargs)
 
 
-def scrape_on_page(page: Page, settings: Settings, job: SubbatchJob) -> ScrapeResult:
+def scrape_on_page(
+    page: Page,
+    settings: Settings,
+    job: SubbatchJob,
+    *,
+    finalized_hours: set[tuple[int, int, int, int]] | None = None,
+) -> ScrapeResult:
     """Query Sorting Production Analysis on an already-open UniMap page."""
     _ensure_logged_in_and_open_analysis(page, settings)
-    target = _submit_query(page, job)
+    target = _submit_query_with_recovery(page, settings, job)
     return ScrapeResult(
-        hourly=_download_hourly_csv(page, job.operation_date),
+        hourly=_capture_hourly_throughput(page, job, finalized_hours=finalized_hours),
         chutes=_parse_chutes(target),
         feed_stations=_parse_feed_stations(target),
         scraped_at=datetime.now(timezone.utc),
