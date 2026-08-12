@@ -222,7 +222,7 @@ st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 st.subheader("Latest city / hub totals")
 st.caption(
     "Mapping: `last_mile` → city, `transit` → warehouse "
-    "(latest `chute_destination` row per chute). "
+    "(chute_destination effective for that batch ops day: latest effective_date ≤ subbatch_date). "
     "Delta = current chute total − previous scrape (floored at 0)."
 )
 
