@@ -529,6 +529,7 @@
     let cityChartModel = { series: [], cities: [] };
     let cityChartSelection = CITY_CHART_DEFAULT.slice();
     let activeTab = "city";
+    let userPickedTab = false;
 
     function normalizeUsername(username) {
       return String(username || "").trim().toLowerCase().replace(/\s+/g, ".");
@@ -555,6 +556,12 @@
       // default: legacy email users get city+feed; username users need explicit roles
       if ((user?.email || "").endsWith(`@${USERNAME_DOMAIN}`)) return ["feed"];
       return ["city", "feed"];
+    }
+
+    function defaultTabFromUser(user) {
+      const raw = String(user?.app_metadata?.default_tab || "").toLowerCase();
+      if (raw === "feed" || raw === "city") return raw;
+      return "city";
     }
 
     function hasRole(name) {
@@ -645,11 +652,13 @@
       return `${formatHour12(startIso)}-${formatHour12(endIso)}`;
     }
 
-    /** Regular :30 hour bucket for a scrape end (7:30→6:30, 7:50→7:30). */
+    /** :30–:30 hour bucket. Scrapes through :40 still close the prior :30 (late :30 run). */
     function regularHalfHourBucketMs(iso) {
       const etMs = new Date(iso).getTime();
       const minute = Number(etParts(iso, { minute: "2-digit", hour12: false }).minute);
-      const deltaMin = minute > 30 ? (minute - 30) : (minute + 30);
+      // ≤:40 → previous :30 (includes on-time :30 and a few minutes late).
+      // ≥:41 → current hour's :30.
+      const deltaMin = minute <= 40 ? (minute + 30) : (minute - 30);
       const d = new Date(iso);
       return etMs - deltaMin * 60 * 1000 - d.getSeconds() * 1000 - d.getMilliseconds();
     }
@@ -878,7 +887,7 @@
       // Only show the tab bar when the user can switch (both roles).
       $("app-tabs").classList.toggle("hidden", !(canCity && canFeed));
       if (canCity && canFeed) {
-        setActiveTab(activeTab === "feed" ? "feed" : "city");
+        setActiveTab(userPickedTab ? activeTab : defaultTabFromUser(session.user));
       } else if (canFeed) {
         setActiveTab("feed");
       } else if (canCity) {
@@ -1478,6 +1487,7 @@
     $("app-tabs").addEventListener("click", (event) => {
       const btn = event.target.closest(".app-tab[data-tab]");
       if (!btn || btn.classList.contains("hidden")) return;
+      userPickedTab = true;
       setActiveTab(btn.dataset.tab);
     });
     $("tiles").addEventListener("click", (event) => {
@@ -1533,6 +1543,7 @@
         cityChartModel = { series: [], cities: [] };
         cityChartSelection = CITY_CHART_DEFAULT.slice();
         activeTab = "city";
+        userPickedTab = false;
         $("app-tabs").classList.add("hidden");
         $("tiles").innerHTML = "";
         $("upper-cards").innerHTML = "";

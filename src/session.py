@@ -76,8 +76,8 @@ def open_uniuni_session(
         try:
             yield session
         finally:
-            # Only persist a usable session — failed logins used to overwrite
-            # good cookies with a half-logged-in /main state.
+            # Only persist a usable session. If login failed, delete any poison
+            # on-disk state so the next run starts clean (e.g. after reboot).
             if state_path:
                 try:
                     from .scraper import _portal_logged_in
@@ -88,6 +88,9 @@ def open_uniuni_session(
                         print(f"Saved UniMap session to {state_path}")
                     else:
                         print("Skipped saving UniMap session (not fully logged in).")
+                        if os.path.exists(state_path):
+                            os.remove(state_path)
+                            print(f"Deleted unusable session file: {state_path}")
                 except Exception as exc:
                     print(f"Skipped saving UniMap session ({exc}).")
             context.close()

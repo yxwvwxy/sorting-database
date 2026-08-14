@@ -1,4 +1,4 @@
-"""Set app_metadata.roles for dashboard users."""
+"""Set app_metadata.roles (and optional default_tab) for dashboard users."""
 from __future__ import annotations
 
 import argparse
@@ -25,6 +25,12 @@ def main() -> int:
         "--roles",
         required=True,
         help="Comma-separated roles, e.g. city,feed or feed",
+    )
+    parser.add_argument(
+        "--default-tab",
+        choices=("city", "feed"),
+        default=None,
+        help="Landing tab when the user has both city and feed roles",
     )
     args = parser.parse_args()
 
@@ -53,8 +59,11 @@ def main() -> int:
         return 1
 
     uid = getattr(match, "id")
-    sb.auth.admin.update_user_by_id(uid, {"app_metadata": {"roles": roles}})
-    print(f"Updated {args.username}: roles={roles}")
+    meta = {"roles": roles}
+    if args.default_tab:
+        meta["default_tab"] = args.default_tab
+    sb.auth.admin.update_user_by_id(uid, {"app_metadata": meta})
+    print(f"Updated {args.username}: {meta}")
     return 0
 
 

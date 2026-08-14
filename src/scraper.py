@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import io
+import os
 import re
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
@@ -209,6 +210,43 @@ def _login_form_visible(page: Page) -> bool:
     return password.count() > 0 and password.first.is_visible()
 
 
+def _purge_browser_auth(page: Page, settings: Settings) -> None:
+    """Drop stale cookies/storage and the on-disk session file.
+
+    After a Windows reboot the saved storage_state often leaves UniMap on /main
+    without a usable session and without a login form. Clearing only cookies is
+    not enough — localStorage must go too, and the poison file must be deleted.
+    """
+    print("Clearing stale UniMap browser auth...")
+    try:
+        page.context.clear_cookies()
+    except Exception:
+        pass
+
+    state_path = settings.uniuni_auth_state_path
+    if state_path and os.path.exists(state_path):
+        try:
+            os.remove(state_path)
+            print(f"Deleted expired session file: {state_path}")
+        except Exception as exc:
+            print(f"Could not delete session file ({exc}).")
+
+    try:
+        page.goto(
+            "https://dispatch.uniuni.com/",
+            wait_until="domcontentloaded",
+            timeout=30_000,
+        )
+        page.evaluate(
+            """() => {
+              try { localStorage.clear(); } catch (e) {}
+              try { sessionStorage.clear(); } catch (e) {}
+            }"""
+        )
+    except Exception:
+        pass
+
+
 def _login_with_credentials(page: Page, settings: Settings) -> None:
     """Username/password login for full-page /login or re-auth modal on /main."""
     _dismiss_portal_dialogs(page)
@@ -216,15 +254,15 @@ def _login_with_credentials(page: Page, settings: Settings) -> None:
     if _portal_logged_in(page) and not _login_form_visible(page):
         return
 
+    # Always purge before password login — stale post-reboot state is the usual
+    # reason /login bounces back to /main with no form.
+    _purge_browser_auth(page, settings)
+
     last_error = "UniMap login did not complete."
     for attempt in range(1, 4):
         if not _login_form_visible(page):
-            # Stale cookies often bounce /login -> /main without a usable session.
-            if attempt > 1 or "dispatch.uniuni.com" in (page.url or ""):
-                try:
-                    page.context.clear_cookies()
-                except Exception:
-                    pass
+            if attempt > 1:
+                _purge_browser_auth(page, settings)
                 page.goto("about:blank", wait_until="domcontentloaded", timeout=15_000)
             page.goto(settings.uniuni_portal_url, wait_until="domcontentloaded", timeout=60_000)
             _dismiss_portal_dialogs(page)
