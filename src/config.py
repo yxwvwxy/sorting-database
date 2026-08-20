@@ -10,7 +10,8 @@ from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 ET = ZoneInfo("America/New_York")
-SUBBATCH_PATTERN = re.compile(r"^NJSUB-(\d{8})2100$", re.I)
+# Stamp is YYYYMMDD + time digits (usually 2100; sometimes 2101 etc.).
+SUBBATCH_PATTERN = re.compile(r"^NJSUB-(\d{8})\d+$", re.I)
 
 
 @dataclass(frozen=True)
@@ -120,12 +121,12 @@ def operation_date_et(now: datetime | None = None) -> date:
 
 
 def operation_date_from_subbatch(subbatch: str) -> date:
-    """Derive operation date from NJSUB-YYYYMMDD2100 (stamp day + 1)."""
+    """Derive operation date from NJSUB-YYYYMMDD#### (stamp day + 1)."""
     match = SUBBATCH_PATTERN.match(subbatch.strip())
     if not match:
         raise RuntimeError(
             f"Cannot parse operation date from subbatch {subbatch!r}. "
-            "Expected NJSUB-YYYYMMDD2100."
+            "Expected NJSUB-YYYYMMDD followed by time digits (e.g. 2100 or 2101)."
         )
     stamp = datetime.strptime(match.group(1), "%Y%m%d").date()
     return stamp + timedelta(days=1)

@@ -21,7 +21,8 @@ from .scraper import (
 )
 
 MAIN_URL = "https://dispatch.uniuni.com/main"
-BATCH_NO_PATTERN = re.compile(r"Batch\s*No\s*:?\s*(NJSUB-\d{8}2100)", re.I)
+# Read whatever follows Batch No — do not require a 2100 suffix.
+BATCH_NO_PATTERN = re.compile(r"Batch\s*No\s*:?\s*(NJSUB-\d{8}\d+)", re.I)
 
 
 def _dismiss_blocking_dialogs(page: Page) -> None:
@@ -238,7 +239,7 @@ def fetch_batch_on_page(
 
     slot_page.wait_for_timeout(1_500)
     slot_page.wait_for_function(
-        """() => /Batch\\s*No\\s*:?\\s*NJSUB-\\d{8}2100/i.test(document.body.innerText || '')""",
+        """() => /Batch\\s*No\\s*:?\\s*NJSUB-\\d{8}\\d+/i.test(document.body.innerText || '')""",
         timeout=30_000,
     )
     subbatch = _read_batch_no(slot_page)
