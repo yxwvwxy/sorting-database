@@ -111,3 +111,55 @@ def save_scrape_result(
             "p_feeds": feed_rows,
         },
     ).execute()
+
+
+def has_subbatch_scrape(client: Client, subbatch: str) -> bool:
+    """True when at least one scrape snapshot exists for this subbatch."""
+    response = (
+        client.table("subbatch")
+        .select("subbatch")
+        .eq("subbatch", subbatch)
+        .limit(1)
+        .execute()
+    )
+    return bool(response.data)
+
+
+def has_city_initials(client: Client, subbatch: str) -> bool:
+    """True when Workflow Management initials were already saved for this batch."""
+    response = (
+        client.table("city_initial_volume")
+        .select("city")
+        .eq("subbatch_id", subbatch)
+        .limit(1)
+        .execute()
+    )
+    return bool(response.data)
+
+
+def save_city_initials(
+    client: Client,
+    job: SubbatchJob,
+    rows: list[dict[str, Any]],
+    *,
+    scraped_at: datetime | None = None,
+    source: str = "workflow_management",
+) -> None:
+    """Upsert RIC/ALB/SWF/SYR/PVD2 initial volumes for an ops-day batch."""
+    stamp = _as_utc_iso(scraped_at or datetime.now(timezone.utc))
+    payload = [
+        {
+            "subbatch_id": job.subbatch,
+            "operation_date": job.operation_date.isoformat(),
+            "city": row["city"],
+            "initial_volume": int(row["initial_volume"]),
+            "scraped_at": stamp,
+            "source": source,
+        }
+        for row in rows
+    ]
+    (
+        client.table("city_initial_volume")
+        .upsert(payload, on_conflict="subbatch_id,city")
+        .execute()
+    )

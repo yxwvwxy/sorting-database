@@ -70,4 +70,8 @@ git pull origin main
 
 - **21:10 ET**: use saved batch (`.current-batch.json`), do not open Slot Assignment  
 - **From 21:30 ET**: poll Slot Assignment until Batch No changes; page value is source of truth  
-- Scrapes at **:10 / :30 / :50** each hour; chute/feed every run; hourly = current hour updates each run; completed hours finalize once; outage backfill for missed completed hours
+- Scrapes at **:10 / :30 / :50** each hour  
+- **First scrape of a new ops-day batch** (after Batch No switches): open **Workflow Management**, read Step 2 warehouse initials for **RIC / ALB / SWF / SYR / BOS→PVD2**, save to `city_initial_volume`, and **skip chute/隔口 scrape** that run  
+- Later runs: normal Sorting Production Analysis chute/feed/hourly scrape  
+- City totals in `city_volume_series`: **initial + chute volumes** for those five cities  
+- Manual initials only: `python -m src.main --initials-only --headed --subbatch NJSUB-YYYYMMDD2100`

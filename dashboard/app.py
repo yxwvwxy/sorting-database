@@ -223,6 +223,7 @@ st.subheader("Latest city / hub totals")
 st.caption(
     "Mapping: `last_mile` → city, `transit` → warehouse "
     "(chute_destination effective for that batch ops day: latest effective_date ≤ subbatch_date). "
+    "City total = Workflow Management initial carryover (RIC/ALB/SWF/SYR/PVD2) + chute volumes. "
     "Delta = current chute total − previous scrape (floored at 0)."
 )
 

@@ -48,6 +48,11 @@ class UniUniSession:
             finalized_hours=finalized_hours,
         )
 
+    def fetch_city_initials(self, job: SubbatchJob):
+        from .workflow_initials import fetch_city_initials
+
+        return fetch_city_initials(self.page, self.settings, job)
+
 
 @contextmanager
 def open_uniuni_session(
