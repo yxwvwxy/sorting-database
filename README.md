@@ -24,6 +24,7 @@ Live site (GitHub Pages from this repo’s `docs/`):
 
 - Scraper + dashboard now live in **one** repo: [`sorting-database`](https://github.com/yxwvwxy/sorting-database)
 - Must sign in before data loads (`city_volume_series` / `list_scrape_batches` are `authenticated` only)
+- Or click **Login as Guest** (read-only; same RLS as signed-in users)
 - `last_mile` → city; `transit` → warehouse  
 - Source of truth for Pages: [`docs/index.html`](docs/index.html) (keep [`web/index.html`](web/index.html) in sync for optional Supabase Storage publish)
 - Legacy Pages URL [`sorting-city-dashboard`](https://yxwvwxy.github.io/sorting-city-dashboard/) redirects here; that separate repo is archived
