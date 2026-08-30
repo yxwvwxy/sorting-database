@@ -2,7 +2,7 @@
 
 Local / Windows UniMap scraper for NJ sorting data → Supabase, plus the public city dashboard.
 
-**Canonical repo:** [`yxwvwxy/Sorting-Database`](https://github.com/yxwvwxy/Sorting-Database)  
+**Canonical repo:** [`yxwvwxy/sorting-database`](https://github.com/yxwvwxy/sorting-database)  
 (Local folder name: `Sorting Database`)
 
 This is the **only active** sorting project repo. Older GitHub repos (`sorting-data-scrape`, `sorting-city-dashboard`) are archived and unused.
@@ -22,7 +22,7 @@ python -m src.main --dry-run
 
 Live site (GitHub Pages from this repo’s `docs/`):
 
-**https://yxwvwxy.github.io/Sorting-Database/**
+**https://yxwvwxy.github.io/sorting-database/**
 
 - Must sign in before data loads (`city_volume_series` / `list_scrape_batches` are `authenticated` only)
 - Or click **Login as Guest** (read-only; same RLS as signed-in users)

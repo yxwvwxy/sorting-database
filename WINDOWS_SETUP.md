@@ -50,7 +50,7 @@ git push origin main
 
 ```powershell
 cd $HOME\Projects
-git clone https://github.com/yxwvwxy/Sorting-Database.git "Sorting Database"
+git clone https://github.com/yxwvwxy/sorting-database.git "Sorting Database"
 cd "Sorting Database"
 git checkout main
 ```
