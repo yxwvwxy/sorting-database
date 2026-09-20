@@ -453,7 +453,7 @@
       <div id="meta" class="meta"></div>
       <p id="error" class="error hidden"></p>
       <h2>Latest city / hub totals</h2>
-      <p class="caption">Click a city to plot its growth. Default chart: EWR + CT + AT. ATL = ATL+PGV+FAY; LAX = LAX+SJC+SEA.</p>
+      <p class="caption">Click a city to plot its growth. Default chart: EWR + CT + AT. ATL = ATL+PGV+FAY; DFW = DFW+DEN; LAX = LAX+SJC+SEA.</p>
       <div id="tiles" class="city-modules"></div>
       <h2 style="margin-top:1.35rem">Growth chart</h2>
       <p id="chart-caption" class="caption">Showing EWR, CT, AT</p>
@@ -528,8 +528,9 @@
     const CITY_BLOCK_REGION = ["ATL", "MIA", "ORD", "DFW", "LAX"];
     const CITY_BLOCK_NYC = ["EWR", "JFK"];
     const ATL_PARTS = ["ATL", "PGV", "FAY"];
+    const DFW_PARTS = ["DFW", "DEN"];
     const LAX_PARTS = ["LAX", "SJC", "SEA"];
-    const CITY_ROLLED_PARTS = new Set(["PGV", "FAY", "SJC", "SEA"]);
+    const CITY_ROLLED_PARTS = new Set(["PGV", "FAY", "DEN", "SJC", "SEA"]);
     const CITY_RESERVED = new Set([
       ...CITY_BLOCK_7PM,
       ...CITY_BLOCK_9PM,
@@ -999,6 +1000,7 @@
         .sort((a, b) => a.localeCompare(b));
 
       const atl = sumCityParts(map, ATL_PARTS);
+      const dfw = sumCityParts(map, DFW_PARTS);
       const lax = sumCityParts(map, LAX_PARTS);
 
       const module = (title, body) => `
@@ -1019,6 +1021,7 @@
 
       const blockRegion = CITY_BLOCK_REGION.map((code) => {
         if (code === "ATL") return tileHtml("ATL", atl.total_volume, atl.delta_volume, atl.breakdown);
+        if (code === "DFW") return tileHtml("DFW", dfw.total_volume, dfw.delta_volume, dfw.breakdown);
         if (code === "LAX") return tileHtml("LAX", lax.total_volume, lax.delta_volume, lax.breakdown);
         const r = map.get(code);
         return tileHtml(code, r ? r.total_volume : 0, r ? r.delta_volume : 0);
@@ -1061,13 +1064,14 @@
 
     function buildCityChartModel(series) {
       const hide = new Set(CITY_ROLLED_PARTS);
-      const base = series.filter((r) => !hide.has(r.city) && r.city !== "ATL" && r.city !== "LAX");
+      const base = series.filter((r) => !hide.has(r.city) && r.city !== "ATL" && r.city !== "DFW" && r.city !== "LAX");
       const atl = aggregateCitySeries(series, ATL_PARTS, "ATL");
+      const dfw = aggregateCitySeries(series, DFW_PARTS, "DFW");
       const lax = aggregateCitySeries(series, LAX_PARTS, "LAX");
-      const merged = [...base, ...atl, ...lax];
+      const merged = [...base, ...atl, ...dfw, ...lax];
       const present = new Set(merged.map((r) => r.city));
       const leftovers = [...present]
-        .filter((c) => !CITY_RESERVED.has(c) && c !== "ATL" && c !== "LAX")
+        .filter((c) => !CITY_RESERVED.has(c) && c !== "ATL" && c !== "DFW" && c !== "LAX")
         .sort((a, b) => a.localeCompare(b));
       const order = [
         ...CITY_BLOCK_7PM,

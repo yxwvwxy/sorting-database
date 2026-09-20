@@ -213,7 +213,7 @@ def _resolve_from_slot_assignment(
     # Switched: page value is the new ops-day batch.
     if awaiting_from and page_batch != awaiting_from:
         job = SubbatchJob(
-            operation_date=window_ops,
+            operation_date=operation_date_from_subbatch(page_batch),
             subbatch=page_batch,
             machine_id=machine_id,
         )
@@ -225,7 +225,7 @@ def _resolve_from_slot_assignment(
         )
         print(
             f"Batch switched: {awaiting_from} -> {page_batch} "
-            f"(operation date {window_ops}). "
+            f"(operation date {job.operation_date}). "
             "No more Slot checks until next 21:30 ET."
         )
         return job

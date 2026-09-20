@@ -120,6 +120,12 @@ def operation_date_et(now: datetime | None = None) -> date:
     return current_subbatch_job(now=now).operation_date
 
 
+def is_opening_initials_slot(now: datetime | None = None) -> bool:
+    """True for the 21:30 ET scrape (21:30–21:49): workflow 存量 only, no 隔口."""
+    current = _as_eastern(now)
+    return current.hour == 21 and 30 <= current.minute < 50
+
+
 def operation_date_from_subbatch(subbatch: str) -> date:
     """Derive operation date from NJSUB-YYYYMMDD#### (stamp day + 1)."""
     match = SUBBATCH_PATTERN.match(subbatch.strip())

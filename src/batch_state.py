@@ -44,6 +44,12 @@ def load_batch_state(*, machine_id: int = 9) -> BatchState | None:
         operation_date = date.fromisoformat(str(raw_ops))
     else:
         operation_date = operation_date_from_subbatch(subbatch)
+    try:
+        parsed_ops = operation_date_from_subbatch(subbatch)
+        if operation_date != parsed_ops:
+            operation_date = parsed_ops
+    except RuntimeError:
+        pass
 
     window_raw = data.get("window_operation_date")
     window_operation_date = date.fromisoformat(str(window_raw)) if window_raw else None
