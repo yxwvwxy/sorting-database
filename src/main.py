@@ -63,7 +63,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--initials-only",
         action="store_true",
-        help="Only fetch Workflow Management city initials (skip chute scrape).",
+        help=(
+            "Only fetch Workflow Management city initials (skip chute scrape). "
+            "Allowed only during the 21:30–21:49 ET opening slot."
+        ),
     )
     args = parser.parse_args(argv)
 
@@ -103,28 +106,25 @@ def main(argv: list[str] | None = None) -> int:
                 f"city initials saved: {already_initials}"
             )
 
-        # 21:30 ET: Workflow 存量 for RIC/ALB/SWF/SYR/PVD2, skip 隔口 (sorter ~0).
-        # 21:50 ET: first chute scrape for all cities.
-        # Missed 21:30: first successful run of the new ops day fetches Workflow
-        # 存量 AND all-city chutes. Those 5-city chute totals are a baseline only;
-        # later totals = workflow + chute increment since that first scrape.
-        # --initials-only always re-fetches (demo / manual refresh) even if rows exist.
-        first_ops_day_run = (not already_scraped) or args.initials_only
-        need_initials = args.initials_only or (
-            first_ops_day_run and not already_initials
-        )
+        # 21:30 ET only: Workflow warehouse 存量 for RIC/ALB/SWF/SYR/PVD2.
+        # After 21:30, RIC warehouse mixes RIC+ORF and BOS warehouse mixes
+        # BOS+MHT+PVD1+PVD2, so warehouse totals cannot map to a single city.
+        # Missed 21:30: do not catch up Workflow; 7pm five-city totals = chute only.
         initials_summary: dict | None = None
         opening_slot = is_opening_initials_slot()
 
-        if need_initials:
-            skip_chute_this_run = args.initials_only or opening_slot
+        if args.initials_only and not opening_slot:
             print(
-                "Fetching city initials from Workflow Management"
-                + (
-                    " (skipping chute/隔口 scrape this run)."
-                    if skip_chute_this_run
-                    else " (late first run: also scraping chute/隔口 this run)."
-                )
+                "Refusing --initials-only outside 21:30–21:49 ET. "
+                "Later Workflow warehouse totals mix cities "
+                "(RIC warehouse = RIC+ORF; BOS warehouse = BOS+MHT+PVD1+PVD2)."
+            )
+            return 1
+
+        if opening_slot and (args.initials_only or not already_initials):
+            print(
+                "Fetching city initials from Workflow Management "
+                "(skipping chute/隔口 scrape this run)."
             )
             initials = session.fetch_city_initials(job)
             initials_summary = {
@@ -153,76 +153,44 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 print("Dry run — city initials not written.")
 
-            if skip_chute_this_run:
-                # 21:30 (or --initials-only): marker so later :10/:30/:50 do chute.
-                if not args.dry_run and not already_scraped:
-                    assert client is not None
-                    marker = ScrapeResult(
-                        scraped_at=datetime.now(timezone.utc),
-                        hourly=[],
-                        chutes=[],
-                        feed_stations=[],
-                    )
-                    save_scrape_result(client, job, marker)
-                    print(
-                        "Saved empty scrape marker (no chute rows) so later runs "
-                        "will scrape Sorting Production Analysis."
-                    )
-
-                summary = {
-                    "operation_date": job.operation_date.isoformat(),
-                    "subbatch": job.subbatch,
-                    "machine_id": job.machine_id,
-                    "mode": "city_initials_first_run",
-                    "hourly_rows": 0,
-                    "chute_rows": 0,
-                    "feed_station_rows": 0,
-                    "city_initials": initials_summary,
-                    "note": (
-                        "Skipped chute/隔口 scrape on 21:30 opening run. "
-                        "Five-city totals = workflow 存量 + later chute increment "
-                        "(RIC/ALB/SWF/SYR/PVD2; BOS Warehouse → PVD2)."
-                    ),
-                }
-                print(json.dumps(summary, indent=2))
-                return 0
-
-        if (not already_initials) and already_scraped:
-            # Mid-day catch-up: batch already has chute scrapes but initials missing
-            print(
-                "City initials missing for an already-scraped batch — "
-                "fetching Workflow Management initials before chute scrape."
-            )
-            try:
-                initials = session.fetch_city_initials(job)
-                initials_summary = {
-                    "subbatch": initials.subbatch,
-                    "operation_date": initials.operation_date,
-                    "scraped_at": initials.scraped_at.isoformat(),
-                    "cities": {
-                        row.city: row.initial_volume for row in initials.rows
-                    },
-                }
-                if not args.dry_run:
-                    assert client is not None
-                    save_city_initials(
-                        client,
-                        job,
-                        [
-                            {
-                                "city": row.city,
-                                "initial_volume": row.initial_volume,
-                            }
-                            for row in initials.rows
-                        ],
-                        scraped_at=initials.scraped_at,
-                    )
-                    print("Saved catch-up city_initial_volume rows.")
-            except Exception as err:
-                print(
-                    f"WARNING: could not fetch city initials ({err}); "
-                    "continuing scrape."
+            if not args.dry_run and not already_scraped:
+                assert client is not None
+                marker = ScrapeResult(
+                    scraped_at=datetime.now(timezone.utc),
+                    hourly=[],
+                    chutes=[],
+                    feed_stations=[],
                 )
+                save_scrape_result(client, job, marker)
+                print(
+                    "Saved empty scrape marker (no chute rows) so later runs "
+                    "will scrape Sorting Production Analysis."
+                )
+
+            summary = {
+                "operation_date": job.operation_date.isoformat(),
+                "subbatch": job.subbatch,
+                "machine_id": job.machine_id,
+                "mode": "city_initials_first_run",
+                "hourly_rows": 0,
+                "chute_rows": 0,
+                "feed_station_rows": 0,
+                "city_initials": initials_summary,
+                "note": (
+                    "Skipped chute/隔口 scrape on 21:30 opening run. "
+                    "Five-city totals = workflow 存量 + later chute. "
+                    "RIC Warehouse → RIC and BOS Warehouse → PVD2 are valid "
+                    "only at this opening slot."
+                ),
+            }
+            print(json.dumps(summary, indent=2))
+            return 0
+
+        if not already_initials:
+            print(
+                "21:30 Workflow 存量 not captured; "
+                "7pm five-city totals will use chute/隔口 only."
+            )
 
         finalized_hours = None
         if client is not None:

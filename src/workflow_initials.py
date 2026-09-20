@@ -1,10 +1,14 @@
 """Fetch ops-day initial city volumes from UniMap Workflow Management.
 
+Only valid during the 21:30–21:49 ET opening slot. After that, warehouses mix
+cities (RIC warehouse = RIC+ORF; BOS warehouse = BOS+MHT+PVD1+PVD2), so these
+warehouse totals must not be stored as a single dashboard city.
+
 Flow (after new batch is known):
   Menu → WORKFLOW MANAGEMENT → Step 1 Select Batch → Enter
   → Step 2 Select Warehouse dropdown → read warehouse quantities.
 
-Warehouse labels → dashboard city:
+Warehouse labels → dashboard city (21:30 opening only):
   RIC / ALB / SWF / SYR Warehouse → same code
   BOS Warehouse → PVD2
 """

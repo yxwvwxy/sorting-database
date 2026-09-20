@@ -2,8 +2,7 @@
 """Mac-only: poll for the new ops-day batch and write city initials.
 
 Intended for evenings when the Windows runner does not yet have this code.
-Runs from ~21:30 ET until initials for tonight's switch-window ops day exist,
-or until 22:30 ET.
+Runs only during the 21:30–21:49 ET opening slot.
 """
 
 from __future__ import annotations
@@ -11,7 +10,7 @@ from __future__ import annotations
 import subprocess
 import sys
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -49,9 +48,15 @@ def main() -> int:
 
     now = _now_et()
     expected = switch_window_operation_date(now)
-    deadline = now.replace(hour=22, minute=30, second=0, microsecond=0)
-    if now >= deadline:
-        deadline = now + timedelta(minutes=45)
+    window_start = now.replace(hour=21, minute=30, second=0, microsecond=0)
+    deadline = now.replace(hour=21, minute=50, second=0, microsecond=0)
+    if now < window_start or now >= deadline:
+        print(
+            f"[{now.isoformat()}] Outside 21:30–21:49 ET opening slot — "
+            "not fetching Workflow warehouse 存量 "
+            "(later RIC/BOS warehouse totals mix cities)."
+        )
+        return 0
 
     print(
         f"[{now.isoformat()}] Mac evening initials: "

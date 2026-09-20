@@ -73,7 +73,7 @@ git pull origin main
 - **21:10 ET**: use saved batch (`.current-batch.json`), do not open Slot Assignment  
 - **From 21:30 ET**: poll Slot Assignment until Batch No changes; page value is source of truth  
 - Scrapes at **:10 / :30 / :50** each hour  
-- **First scrape of a new ops-day batch** (after Batch No switches): open **Workflow Management**, read Step 2 warehouse initials for **RIC / ALB / SWF / SYR / BOS→PVD2**, save to `city_initial_volume`, and **skip chute/隔口 scrape** that run  
-- Later runs: normal Sorting Production Analysis chute/feed/hourly scrape  
-- City totals in `city_volume_series`: **initial + chute volumes** for those five cities  
-- Manual initials only: `python -m src.main --initials-only --headed --subbatch NJSUB-YYYYMMDD2100`
+- **21:30 ET opening scrape** (after Batch No switches): open **Workflow Management**, read Step 2 warehouse initials for **RIC / ALB / SWF / SYR / BOS→PVD2**, save to `city_initial_volume`, and **skip chute/隔口 scrape** that run. Those warehouse→city maps are only valid at 21:30 (RIC warehouse later mixes ORF; BOS warehouse later mixes BOS/MHT/PVD1/PVD2).  
+- Later runs: normal Sorting Production Analysis chute/feed/hourly scrape. **Do not** catch up Workflow 存量 after 21:50.  
+- City totals in `city_volume_series`: **21:30 initial + chute** for those five cities; if 21:30 was missed, **chute only**  
+- Manual initials only (21:30–21:49 ET): `python -m src.main --initials-only --headed --subbatch NJSUB-YYYYMMDD2100`

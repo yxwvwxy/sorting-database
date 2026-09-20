@@ -121,7 +121,11 @@ def operation_date_et(now: datetime | None = None) -> date:
 
 
 def is_opening_initials_slot(now: datetime | None = None) -> bool:
-    """True for the 21:30 ET scrape (21:30–21:49): workflow 存量 only, no 隔口."""
+    """True for the 21:30 ET scrape (21:30–21:49): workflow 存量 only, no 隔口.
+
+    After this window, warehouse totals mix cities (RIC+ORF, BOS+MHT+PVD1+PVD2)
+    and must not be stored as RIC/PVD2 initials.
+    """
     current = _as_eastern(now)
     return current.hour == 21 and 30 <= current.minute < 50
 
