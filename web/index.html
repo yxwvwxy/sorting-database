@@ -527,7 +527,6 @@
     ];
     const CITY_BLOCK_REGION = ["ATL", "MIA", "ORD", "DFW", "LAX"];
     const CITY_BLOCK_NYC = ["EWR", "JFK"];
-    const GOFO_WAREHOUSES = ["EWR.H"];
     const ATL_PARTS = ["ATL", "PGV", "FAY"];
     const DFW_PARTS = ["DFW", "DEN"];
     const LAX_PARTS = ["LAX", "SJC", "SEA"];
@@ -537,7 +536,6 @@
       ...CITY_BLOCK_9PM,
       ...CITY_BLOCK_REGION,
       ...CITY_BLOCK_NYC,
-      ...GOFO_WAREHOUSES,
       ...CITY_ROLLED_PARTS,
     ]);
     const CITY_CHART_DEFAULT = ["EWR", "CT", "AT"];
@@ -936,10 +934,6 @@
       `;
     }
 
-    function isGofoRow(row) {
-      return String(row.section || "") === "gofo";
-    }
-
     function cityRowMap(latestRows) {
       const map = new Map();
       for (const r of latestRows) map.set(r.city, r);
@@ -1000,11 +994,7 @@
     }
 
     function renderTiles(latestRows) {
-      const cityRows = latestRows.filter((r) => !isGofoRow(r));
-      const gofoRows = latestRows
-        .filter(isGofoRow)
-        .sort((a, b) => String(a.city).localeCompare(String(b.city)));
-      const map = cityRowMap(cityRows);
+      const map = cityRowMap(latestRows);
       const leftovers = [...map.keys()]
         .filter((c) => !CITY_RESERVED.has(c))
         .sort((a, b) => a.localeCompare(b));
@@ -1042,21 +1032,11 @@
         return tileHtml(code, r ? r.total_volume : 0, r ? r.delta_volume : 0);
       }).join("");
 
-      const gofoMap = cityRowMap(gofoRows);
-      const gofoCodes = [...new Set([
-        ...GOFO_WAREHOUSES,
-        ...gofoRows.map((r) => r.city),
-      ])].sort((a, b) => String(a).localeCompare(String(b)));
-      const blockGofo = gofoCodes.map((code) => {
-        const r = gofoMap.get(code);
-        return tileHtml(code, r ? r.total_volume : 0, r ? r.delta_volume : 0);
-      }).join("");
       $("tiles").innerHTML = [
         module("7pm 转运", block7),
         module("9pm 转运", block9),
         module("大区", blockRegion),
         module("EWR / JFK", blockNyc),
-        module("GOFO", blockGofo),
       ].join("");
     }
 
@@ -1083,30 +1063,24 @@
     }
 
     function buildCityChartModel(series) {
-      const citySeries = series.filter((r) => !isGofoRow(r));
-      const gofoSeries = series.filter(isGofoRow);
       const hide = new Set(CITY_ROLLED_PARTS);
-      const base = citySeries.filter((r) => !hide.has(r.city) && r.city !== "ATL" && r.city !== "DFW" && r.city !== "LAX");
-      const atl = aggregateCitySeries(citySeries, ATL_PARTS, "ATL");
-      const dfw = aggregateCitySeries(citySeries, DFW_PARTS, "DFW");
-      const lax = aggregateCitySeries(citySeries, LAX_PARTS, "LAX");
+      const base = series.filter((r) => !hide.has(r.city) && r.city !== "ATL" && r.city !== "DFW" && r.city !== "LAX");
+      const atl = aggregateCitySeries(series, ATL_PARTS, "ATL");
+      const dfw = aggregateCitySeries(series, DFW_PARTS, "DFW");
+      const lax = aggregateCitySeries(series, LAX_PARTS, "LAX");
       const merged = [...base, ...atl, ...dfw, ...lax];
       const present = new Set(merged.map((r) => r.city));
       const leftovers = [...present]
         .filter((c) => !CITY_RESERVED.has(c) && c !== "ATL" && c !== "DFW" && c !== "LAX")
         .sort((a, b) => a.localeCompare(b));
-      const gofoNames = [...new Set(gofoSeries.map((r) => r.city))]
-        .sort((a, b) => String(a).localeCompare(String(b)));
-      for (const name of gofoNames) present.add(name);
       const order = [
         ...CITY_BLOCK_7PM,
         ...CITY_BLOCK_9PM,
         ...leftovers,
         ...CITY_BLOCK_REGION,
         ...CITY_BLOCK_NYC,
-        ...gofoNames,
       ].filter((c) => present.has(c));
-      return { series: [...merged, ...gofoSeries], cities: order };
+      return { series: merged, cities: order };
     }
 
     function renderChart(series, cities) {
@@ -1200,7 +1174,6 @@
 
     function onCityTileActivate(city) {
       if (!city) return;
-      if (!cityChartModel.cities.includes(city)) return;
       // Click same sole selection again → restore default EWR+CT+AT
       if (cityChartSelection.length === 1 && cityChartSelection[0] === city) {
         cityChartSelection = CITY_CHART_DEFAULT.slice();
