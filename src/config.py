@@ -90,13 +90,18 @@ def validate_supabase_settings(settings: Settings) -> None:
         )
 
 
+# 19:10 ET is the last scrape of the current ops day.
+# 19:30 ET is the first scrape of the new ops day and must read the new Batch No.
+OPS_SWITCH_HOUR = 19
+OPS_SWITCH_MINUTE = 30
+
+
 @dataclass(frozen=True)
 class SubbatchJob:
-    """One sorting operation day (9pm–9pm ET).
+    """One sorting operation day (7pm–7pm ET).
 
     ``operation_date`` is the business day (stamp date + 1).
-    ``subbatch`` encodes the creation stamp at 9pm ET
-    (e.g. NJSUB-202606152100 for a batch created Jun 15 at 9pm).
+    The live batch number comes from Slot Assignment at 19:30 ET.
     """
 
     operation_date: date
@@ -111,23 +116,33 @@ def _as_eastern(now: datetime | None = None) -> datetime:
     return current.astimezone(ET)
 
 
-def operation_date_et(now: datetime | None = None) -> date:
-    """Return the operation date for the active 9pm–9pm ET window.
+def new_ops_window_started(now: datetime | None = None) -> bool:
+    """True from 19:30 ET until the next day's 19:30."""
+    current = _as_eastern(now)
+    return current.hour > OPS_SWITCH_HOUR or (
+        current.hour == OPS_SWITCH_HOUR and current.minute >= OPS_SWITCH_MINUTE
+    )
 
-    Switch to the new batch at 21:30 ET (first :30 scrape of the new window).
-    The 21:10 scrape still belongs to the previous batch.
+
+def is_closing_scrape_slot(now: datetime | None = None) -> bool:
+    """True for 19:00–19:29 ET. The 19:10 scrape stays on the current batch."""
+    current = _as_eastern(now)
+    return current.hour == OPS_SWITCH_HOUR and current.minute < OPS_SWITCH_MINUTE
+
+
+def operation_date_et(now: datetime | None = None) -> date:
+    """Return the operation date for the active 7pm–7pm ET window.
+
+    Switch to the new batch at 19:30 ET. The 19:10 scrape still belongs
+    to the previous batch.
     """
     return current_subbatch_job(now=now).operation_date
 
 
 def is_opening_initials_slot(now: datetime | None = None) -> bool:
-    """True for the 21:30 ET scrape (21:30–21:49): workflow 存量 only, no 隔口.
-
-    After this window, warehouse totals mix cities (RIC+ORF, BOS+MHT+PVD1+PVD2)
-    and must not be stored as RIC/PVD2 initials.
-    """
-    current = _as_eastern(now)
-    return current.hour == 21 and 30 <= current.minute < 50
+    """Five-city Workflow initials are no longer captured on the opening scrape."""
+    del now
+    return False
 
 
 def operation_date_from_subbatch(subbatch: str) -> date:
@@ -147,14 +162,15 @@ def current_subbatch_job(
     *,
     machine_id: int = 9,
 ) -> SubbatchJob:
-    """Resolve the active batch from Eastern clock (no Google Sheet).
+    """Resolve a clock fallback batch (no Google Sheet, no Slot Assignment).
 
     Schedule alignment:
-    - 21:10 ET → last scrape of the batch created the previous calendar day at 21:00
-    - 21:30 ET → first scrape of the batch created today at 21:00
+    - 19:10 ET → last scrape of the previous ops day
+    - 19:30 ET → first scrape of the new ops day; the real Batch No comes
+      from Slot Assignment, not this fallback id
     """
     current = _as_eastern(now)
-    if current.hour > 21 or (current.hour == 21 and current.minute >= 30):
+    if new_ops_window_started(current):
         stamp_date = current.date()
     else:
         stamp_date = current.date() - timedelta(days=1)

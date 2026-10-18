@@ -1,4 +1,4 @@
-"""Persist the active batch and optional post-21:30 switch polling state."""
+"""Persist the active batch and optional post-19:30 switch polling state."""
 
 from __future__ import annotations
 

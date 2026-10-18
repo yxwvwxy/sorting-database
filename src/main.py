@@ -53,7 +53,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--refresh-batch",
         action="store_true",
-        help="Force Slot Assignment Batch No refresh (normally only at 21:30 ET).",
+        help="Force Slot Assignment Batch No refresh (normally only from 19:30 ET).",
     )
     parser.add_argument(
         "--use-sheet",
@@ -123,26 +123,18 @@ def main(argv: list[str] | None = None) -> int:
                 f"city initials saved: {already_initials}"
             )
 
-        # 21:30 ET only: Workflow warehouse 存量 for RIC/ALB/SWF/SYR/PVD2.
-        # After 21:30, RIC warehouse mixes RIC+ORF and BOS warehouse mixes
-        # BOS+MHT+PVD1+PVD2, so warehouse totals cannot map to a single city.
-        # Missed 21:30: do not catch up Workflow; 7pm five-city totals = chute only.
+        # Five-city Workflow initials are no longer part of the scrape.
+        # 19:30 reads the new Batch No, then scrapes chute volumes.
         initials_summary: dict | None = None
         opening_slot = is_opening_initials_slot()
 
-        if args.initials_only and not opening_slot and not args.force_initials:
+        if args.initials_only and not args.force_initials:
             print(
-                "Refusing --initials-only outside 21:30–21:49 ET. "
-                "Later Workflow warehouse totals mix cities "
-                "(RIC warehouse = RIC+ORF; BOS warehouse = BOS+MHT+PVD1+PVD2)."
+                "Refusing --initials-only. Five-city Workflow 存量 is no longer captured."
             )
             return 1
 
-        take_initials = (
-            not args.chutes_only
-            and (opening_slot or args.force_initials)
-            and (args.initials_only or not already_initials)
-        )
+        take_initials = (not args.chutes_only) and args.force_initials
         if take_initials:
             print(
                 "Fetching city initials from Workflow Management "
@@ -221,12 +213,6 @@ def main(argv: list[str] | None = None) -> int:
             }
             print(json.dumps(summary, indent=2))
             return 0
-
-        if not already_initials:
-            print(
-                "21:30 Workflow 存量 not captured; "
-                "7pm five-city totals will use chute/隔口 only."
-            )
 
         finalized_hours = None
         if client is not None:

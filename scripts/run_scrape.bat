@@ -47,7 +47,7 @@ if %ATTEMPT% GTR 1 (
   echo Whole-run retry %ATTEMPT%/2 after failure ^(fresh browser in 25s^)...
   powershell -NoProfile -Command "Start-Sleep -Seconds 25"
 )
-".venv\Scripts\python.exe" -m src.main --subbatch NJSUB-202610171930 --chutes-only %*
+".venv\Scripts\python.exe" -m src.main --chutes-only %*
 set ERR=%ERRORLEVEL%
 if %ERR% EQU 0 goto retry_done
 echo Run attempt %ATTEMPT%/2 failed ^(exit %ERR%^).

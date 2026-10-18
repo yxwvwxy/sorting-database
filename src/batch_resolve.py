@@ -2,12 +2,12 @@
 
 Agreed ops rules (America/New_York):
 
-- 21:10 (21:00-21:29): never open Slot Assignment; use the saved batch.
-- From 21:30 until Slot Batch No changes from the pre-switch value:
+- 19:10 (19:00-19:29): never open Slot Assignment; use the saved batch.
+- From 19:30 until Slot Batch No changes from the pre-switch value:
   every run opens Slot Assignment.
   - still old -> scrape with the old batch; check again next run
   - changed -> page value becomes this ops-day batch; no more Slot checks
-    until the next evening's 21:30
+    until the next evening's 19:30
 - If a Slot check fails, the next run must try again (do not mark confirmed).
 - --refresh-batch adopts the live page Batch No outside the evening wait loop.
 """
@@ -23,6 +23,8 @@ from .config import (
     SubbatchJob,
     _as_eastern,
     current_subbatch_job,
+    is_closing_scrape_slot,
+    new_ops_window_started,
     operation_date_from_subbatch,
 )
 from .sheets import fetch_subbatch_for_date
@@ -41,14 +43,14 @@ CONFIRMED_SOURCES = frozenset(
 
 
 def switch_window_operation_date(now: datetime | None = None) -> date:
-    """Ops date for the active post-21:30 switch window.
+    """Ops date for the active post-19:30 switch window.
 
-    Aug 5 21:30 -> Aug 6
+    Aug 5 19:30 -> Aug 6
     Aug 6 01:10 (still waiting) -> Aug 6
-    Aug 6 21:30 -> Aug 7
+    Aug 6 19:30 -> Aug 7
     """
     current = _as_eastern(now)
-    if current.hour > 21 or (current.hour == 21 and current.minute >= 30):
+    if new_ops_window_started(current):
         window_start = current.date()
     else:
         window_start = current.date() - timedelta(days=1)
@@ -73,8 +75,8 @@ def should_poll_slot_assignment(
     current = _as_eastern(now)
     window_ops = switch_window_operation_date(now)
 
-    # 21:10 uses saved batch only.
-    if current.hour == 21 and current.minute < 30:
+    # 19:10 uses saved batch only.
+    if is_closing_scrape_slot(current):
         return False
 
     # Still waiting for the page Batch No to change (may continue overnight).
@@ -84,11 +86,11 @@ def should_poll_slot_assignment(
     if window_batch_confirmed(state, window_ops):
         return False
 
-    # Evening open: every run from 21:30 until confirmed.
-    if current.hour > 21 or (current.hour == 21 and current.minute >= 30):
+    # Evening open: every run from 19:30 until confirmed.
+    if new_ops_window_started(current):
         return True
 
-    # Daytime catch-up: 21:30 was missed/skipped and this window is not confirmed.
+    # Daytime catch-up: 19:30 was missed/skipped and this window is not confirmed.
     return True
 
 
@@ -148,7 +150,7 @@ def resolve_job(
     print(
         f"No saved batch yet; bootstrapped from clock: {fallback.subbatch} "
         f"(operation date {fallback.operation_date}). "
-        "Will poll Slot Assignment from next 21:30 ET until Batch No changes."
+        "Will poll Slot Assignment from next 19:30 ET until Batch No changes."
     )
     return fallback
 
@@ -226,7 +228,7 @@ def _resolve_from_slot_assignment(
         print(
             f"Batch switched: {awaiting_from} -> {page_batch} "
             f"(operation date {job.operation_date}). "
-            "No more Slot checks until next 21:30 ET."
+            "No more Slot checks until next 19:30 ET."
         )
         return job
 
@@ -260,6 +262,6 @@ def _resolve_from_slot_assignment(
     print(
         f"Loaded batch from Slot Assignment: {job.subbatch} "
         f"(operation date {job.operation_date}). "
-        "No more Slot checks until next 21:30 ET."
+        "No more Slot checks until next 19:30 ET."
     )
     return job
