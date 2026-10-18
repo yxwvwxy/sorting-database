@@ -65,7 +65,24 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help=(
             "Only fetch Workflow Management city initials (skip chute scrape). "
-            "Allowed only during the 21:30–21:49 ET opening slot."
+            "Allowed only during the 21:30–21:49 ET opening slot "
+            "unless --force-initials is set."
+        ),
+    )
+    parser.add_argument(
+        "--chutes-only",
+        action="store_true",
+        help=(
+            "Scrape chute volumes only. Do not read Workflow initials and "
+            "do not map chutes through chute_destination."
+        ),
+    )
+    parser.add_argument(
+        "--force-initials",
+        action="store_true",
+        help=(
+            "Fetch Workflow 存量 even outside 21:30–21:49 ET. "
+            "Does not write an empty chute marker."
         ),
     )
     args = parser.parse_args(argv)
@@ -113,7 +130,7 @@ def main(argv: list[str] | None = None) -> int:
         initials_summary: dict | None = None
         opening_slot = is_opening_initials_slot()
 
-        if args.initials_only and not opening_slot:
+        if args.initials_only and not opening_slot and not args.force_initials:
             print(
                 "Refusing --initials-only outside 21:30–21:49 ET. "
                 "Later Workflow warehouse totals mix cities "
@@ -121,16 +138,30 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 1
 
-        if opening_slot and (args.initials_only or not already_initials):
+        take_initials = (
+            not args.chutes_only
+            and (opening_slot or args.force_initials)
+            and (args.initials_only or not already_initials)
+        )
+        if take_initials:
             print(
                 "Fetching city initials from Workflow Management "
                 "(skipping chute/隔口 scrape this run)."
             )
             initials = session.fetch_city_initials(job)
+            initials_at = initials.scraped_at
+            if args.force_initials and not opening_slot:
+                initials_at = datetime.now(ET).replace(
+                    hour=21, minute=31, second=0, microsecond=0
+                )
+                print(
+                    "Late 7pm five-city capture: storing scraped_at as "
+                    f"{initials_at.isoformat()} so city_volume_series treats it as opening 存量."
+                )
             initials_summary = {
                 "subbatch": initials.subbatch,
                 "operation_date": initials.operation_date,
-                "scraped_at": initials.scraped_at.isoformat(),
+                "scraped_at": initials_at.isoformat(),
                 "cities": {row.city: row.initial_volume for row in initials.rows},
             }
             if not args.dry_run:
@@ -142,7 +173,12 @@ def main(argv: list[str] | None = None) -> int:
                         {"city": row.city, "initial_volume": row.initial_volume}
                         for row in initials.rows
                     ],
-                    scraped_at=initials.scraped_at,
+                    scraped_at=initials_at,
+                    source=(
+                        "workflow_management_late"
+                        if args.force_initials and not opening_slot
+                        else "workflow_management"
+                    ),
                 )
                 print(
                     "Saved city_initial_volume for "
@@ -153,7 +189,7 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 print("Dry run — city initials not written.")
 
-            if not args.dry_run and not already_scraped:
+            if not args.dry_run and not already_scraped and not args.force_initials:
                 assert client is not None
                 marker = ScrapeResult(
                     scraped_at=datetime.now(timezone.utc),

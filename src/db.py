@@ -2,14 +2,50 @@
 
 from __future__ import annotations
 
+import json
 import re
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any
 
 from supabase import Client, create_client
 
 from .config import ET, Settings, SubbatchJob
 from .scraper import ScrapeResult, hour_bucket_key
+
+CHUTE_CARRYOVER_PATH = Path("logs") / "chute-101-106-carryover.json"
+
+
+def _apply_chute_carryover(job: SubbatchJob, chute_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Subtract leftover 101-106 volumes captured before the 10/8 ops day started."""
+    if not CHUTE_CARRYOVER_PATH.exists():
+        return chute_rows
+    try:
+        payload = json.loads(CHUTE_CARRYOVER_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return chute_rows
+    if str(payload.get("apply_to_subbatch") or "") != job.subbatch:
+        return chute_rows
+    offsets = {
+        int(chute_id): int(volume)
+        for chute_id, volume in (payload.get("chutes") or {}).items()
+    }
+    if not offsets:
+        return chute_rows
+    adjusted: list[dict[str, Any]] = []
+    notes: list[str] = []
+    for row in chute_rows:
+        chute_id = int(row["chute_id"])
+        volume = int(row["volume"])
+        offset = offsets.get(chute_id, 0)
+        if offset:
+            net = max(0, volume - offset)
+            notes.append(f"{chute_id}:{volume}-{offset}={net}")
+            volume = net
+        adjusted.append({"chute_id": chute_id, "volume": volume})
+    if notes:
+        print("Applied 10/8 chute carryover: " + ", ".join(notes))
+    return adjusted
 
 
 def create_supabase_client(settings: Settings) -> Client:
@@ -92,9 +128,10 @@ def save_scrape_result(
         }
         for row in result.hourly
     ]
-    chute_rows: list[dict[str, Any]] = [
-        {"chute_id": row.chute_id, "volume": row.volume} for row in result.chutes
-    ]
+    chute_rows: list[dict[str, Any]] = _apply_chute_carryover(
+        job,
+        [{"chute_id": row.chute_id, "volume": row.volume} for row in result.chutes],
+    )
     feed_rows: list[dict[str, Any]] = [
         {"station_id": row.station_id, "volume": row.volume} for row in result.feed_stations
     ]

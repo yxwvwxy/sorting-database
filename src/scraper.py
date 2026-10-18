@@ -607,6 +607,43 @@ def _capture_hourly_throughput(
     return selected
 
 
+def standard_chute_ids() -> list[int]:
+    """The 400 physical slots: 20 per bank, banks at 101, 151, ... 1051."""
+    ids: list[int] = []
+    for base in range(100, 1100, 50):
+        ids.extend(range(base + 1, base + 21))
+    return ids
+
+
+def _complete_chute_grid(chutes: list[ChuteRow]) -> list[ChuteRow]:
+    """Keep every page chute, and store volume 0 for grid slots the page omits.
+
+    Blocked slots such as 352 and 952 are not rendered, so a page read is 398.
+    The grid fill makes each snapshot 400 slots without using chute_destination.
+    """
+    by_id: dict[int, int] = {}
+    for row in chutes:
+        by_id[row.chute_id] = row.volume
+    expected = standard_chute_ids()
+    missing = [chute_id for chute_id in expected if chute_id not in by_id]
+    if missing:
+        print(
+            f"Page omitted {len(missing)} of the 400 chutes; storing volume 0: "
+            + ", ".join(str(chute_id) for chute_id in missing)
+        )
+    completed = [
+        ChuteRow(chute_id=chute_id, volume=by_id.get(chute_id, 0)) for chute_id in expected
+    ]
+    extra = sorted(chute_id for chute_id in by_id if chute_id not in set(expected))
+    if extra:
+        print(
+            "Page also had chute ids outside the 400-grid; keeping them: "
+            + ", ".join(str(chute_id) for chute_id in extra)
+        )
+        completed.extend(ChuteRow(chute_id=chute_id, volume=by_id[chute_id]) for chute_id in extra)
+    return completed
+
+
 def _parse_chutes(target: Page | Frame) -> list[ChuteRow]:
     raw = target.evaluate(
         """() => {
@@ -687,7 +724,7 @@ def scrape_on_page(
     target = _submit_query_with_recovery(page, settings, job)
     return ScrapeResult(
         hourly=_capture_hourly_throughput(page, job, finalized_hours=finalized_hours),
-        chutes=_parse_chutes(target),
+        chutes=_complete_chute_grid(_parse_chutes(target)),
         feed_stations=_parse_feed_stations(target),
         scraped_at=datetime.now(timezone.utc),
     )

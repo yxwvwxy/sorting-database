@@ -157,8 +157,15 @@ def _fill_step1_batch(page: Page, subbatch: str) -> None:
     inp.click(force=True)
     inp.fill("")
     inp.fill(subbatch)
-    page.keyboard.press("Enter")
-    page.wait_for_timeout(1_500)
+    page.wait_for_timeout(800)
+    option = page.get_by_role("option", name=re.compile(re.escape(subbatch), re.I))
+    if option.count():
+        print(f"  Step 1: clicking matching batch option ({option.count()} hits)")
+        option.first.click(force=True)
+        page.wait_for_timeout(2_000)
+    else:
+        page.keyboard.press("Enter")
+        page.wait_for_timeout(2_500)
 
 
 def _open_step2_warehouse_dropdown(page: Page) -> None:
