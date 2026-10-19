@@ -590,6 +590,7 @@
     let gofoChartModel = { series: [], cities: [] };
     let gofoChartSelection = [];
     let gofoChartDefault = [];
+    let gofoUniPartLatest = [];
     let activeTab = "gofo";
     let userPickedTab = false;
 
@@ -1544,6 +1545,43 @@
       ewr_multi: "EWR multi",
     };
 
+    const GOFO_ROLLUP = {
+      LAX: ["LAX", "SJC", "SEA", "SLC"],
+      DFW: ["DFW", "DEN", "IAH"],
+    };
+
+    function rollupGofoSeries(series) {
+      const hide = new Set(Object.values(GOFO_ROLLUP).flat());
+      const rolled = [];
+      for (const [name, parts] of Object.entries(GOFO_ROLLUP)) {
+        const byTs = new Map();
+        for (const r of series) {
+          if (r.section !== "uni_hub" || !parts.includes(r.code)) continue;
+          let row = byTs.get(r.scraped_at);
+          if (!row) {
+            row = {
+              subbatch: r.subbatch,
+              subbatch_date: r.subbatch_date,
+              scraped_at: r.scraped_at,
+              section: "uni_hub",
+              code: name,
+              city: `uni_hub|${name}`,
+              total_volume: 0,
+              delta_volume: 0,
+            };
+            byTs.set(r.scraped_at, row);
+          }
+          row.total_volume += Number(r.total_volume || 0);
+          row.delta_volume += Number(r.delta_volume || 0);
+        }
+        rolled.push(...byTs.values());
+      }
+      return [
+        ...series.filter((r) => !(r.section === "uni_hub" && hide.has(r.code))),
+        ...rolled,
+      ];
+    }
+
     function gofoDefaultCities(latestRows) {
       return ["JFK", "PWM"]
         .map((code) => latestRows.find((r) => r.section === "jfk_pwm" && r.code === code))
@@ -1565,9 +1603,14 @@
           .filter((r) => r.section === key)
           .sort((a, b) => Number(b.total_volume) - Number(a.total_volume) || a.code.localeCompare(b.code));
         if (!rows.length) return "";
-        const body = rows.map((r) => tileHtml(
-          r.code, r.total_volume, r.delta_volume, null, gofoChartSelection, r.city
-        )).join("");
+        const body = rows.map((r) => {
+          if (r.section === "uni_hub" && GOFO_ROLLUP[r.code]) {
+            const partMap = new Map(gofoUniPartLatest.map((part) => [part.code, part]));
+            const summed = sumCityParts(partMap, GOFO_ROLLUP[r.code]);
+            return tileHtml(r.code, summed.total_volume, summed.delta_volume, summed.breakdown, gofoChartSelection, r.city);
+          }
+          return tileHtml(r.code, r.total_volume, r.delta_volume, null, gofoChartSelection, r.city);
+        }).join("");
         return `<div class="city-module"><p class="city-module-title">${title}</p><div class="grid">${body}</div></div>`;
       }).join("");
       $("gofo-tiles").innerHTML = mixedHtml + modules;
@@ -1650,12 +1693,16 @@
         gofoChartModel = { series: [], cities: [] };
         gofoChartSelection = [];
         gofoChartDefault = [];
+        gofoUniPartLatest = [];
         Plotly.purge("gofo-chart");
         syncGofoTileSelection();
         showError("gofo-error", new Error("No Gofo city rows for this batch."));
         return;
       }
       const latestTs = series.reduce((m, r) => (r.scraped_at > m ? r.scraped_at : m), series[0]?.scraped_at || "");
+      const latestRaw = series.filter((r) => r.scraped_at === latestTs);
+      gofoUniPartLatest = latestRaw.filter((r) => r.section === "uni_hub");
+      series = rollupGofoSeries(series);
       const latest = series.filter((r) => r.scraped_at === latestTs);
       const cities = [...new Set(series.map((r) => r.city))].sort((a, b) => a.localeCompare(b));
       gofoChartModel = { series, cities };
@@ -1786,6 +1833,7 @@
         gofoChartModel = { series: [], cities: [] };
         gofoChartSelection = [];
         gofoChartDefault = [];
+        gofoUniPartLatest = [];
         activeTab = "gofo";
         userPickedTab = false;
         $("app-tabs").classList.add("hidden");
