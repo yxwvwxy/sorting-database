@@ -125,9 +125,7 @@
       grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
       gap: 0.65rem;
     }
-    .grid.jfk-grid {
-      grid-template-columns: max-content minmax(140px, 1fr);
-    }
+    .tile.wide { grid-column: span 2; }
     .tile.wide .breakdown { white-space: nowrap; }
     .tile {
       border: 1px solid var(--line);
@@ -1694,8 +1692,7 @@
           }
           return tileHtml(r.code, r.total_volume, r.delta_volume, null, gofoChartSelection, r.city);
         }).join("");
-        const gridClass = key === "jfk_pwm" ? "grid jfk-grid" : "grid";
-        return `<div class="city-module">${ewrLine}<p class="${titleClass}">${title}</p><div class="${gridClass}">${body}</div></div>`;
+        return `<div class="city-module">${ewrLine}<p class="${titleClass}">${title}</p><div class="grid">${body}</div></div>`;
       }).join("");
       const mixedHtml = otherMixed.length
         ? `<div class="city-module">${gofoMixedHtml(otherMixed)}</div>`
