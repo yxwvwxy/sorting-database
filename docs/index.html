@@ -461,10 +461,10 @@
       <div id="gofo-meta" class="meta"></div>
       <p id="gofo-error" class="error hidden"></p>
       <h2>Latest city totals</h2>
-      <p class="caption">每个城市仍单独显示，并按前三个英文字母合并。混合城市的隔口单独列出货量和城市，不并进任何一个城市。</p>
+      <p class="caption">Each city is shown separately. Cities that share the first 3 letters are combined. A chute that lists more than one city is listed on its own, with its volume and cities, and is not added into any one city.</p>
       <div id="gofo-tiles" class="city-modules"></div>
       <h2 style="margin-top:1.35rem">Growth chart</h2>
-      <p id="gofo-chart-caption" class="caption">Showing the three largest cities</p>
+      <p id="gofo-chart-caption" class="caption">Showing JFK, PWM</p>
       <div class="panel"><div id="gofo-chart"></div></div>
     </section>
 
@@ -1533,30 +1533,30 @@
       ["bwi", "BWI.H"],
       ["uni_hub", "uni hub"],
       ["jfk_pwm", "JFK / PWM"],
-      ["ewr_one", "EWR.H · 单路线"],
-      ["ewr_multi", "EWR.H · 多路线"],
+      ["ewr_one", "EWR.H · one route"],
+      ["ewr_multi", "EWR.H · multiple routes"],
     ];
     const GOFO_SECTION_SHORT = {
       bwi: "BWI.H",
       uni_hub: "uni hub",
       jfk_pwm: "JFK/PWM",
-      ewr_one: "EWR单路线",
-      ewr_multi: "EWR多路线",
+      ewr_one: "EWR one route",
+      ewr_multi: "EWR multi",
     };
 
     function gofoDefaultCities(latestRows) {
-      return [...latestRows]
-        .sort((a, b) => Number(b.total_volume) - Number(a.total_volume) || a.code.localeCompare(b.code))
-        .slice(0, 3)
+      return ["JFK", "PWM"]
+        .map((code) => latestRows.find((r) => r.section === "jfk_pwm" && r.code === code))
+        .filter(Boolean)
         .map((r) => r.city);
     }
 
     function renderGofoTiles(latestRows, mixedRows) {
       const mixedHtml = (mixedRows || []).length
         ? `<div class="city-module">
-            <p class="city-module-title">混合城市隔口</p>
+            <p class="city-module-title">Mixed-city chutes</p>
             <div class="gofo-mixed">${mixedRows.map((r) =>
-              `<div class="gofo-mixed-row">隔口 <strong>${r.chute_id}</strong> · ${fmt(r.volume)} · ${r.cities}</div>`
+              `<div class="gofo-mixed-row">Chute <strong>${r.chute_id}</strong> · ${fmt(r.volume)} · ${r.cities}</div>`
             ).join("")}</div>
           </div>`
         : "";
