@@ -1590,14 +1590,6 @@
     }
 
     function renderGofoTiles(latestRows, mixedRows) {
-      const mixedHtml = (mixedRows || []).length
-        ? `<div class="city-module">
-            <p class="city-module-title">Mixed-city chutes</p>
-            <div class="gofo-mixed">${mixedRows.map((r) =>
-              `<div class="gofo-mixed-row">Chute <strong>${r.chute_id}</strong> · ${fmt(r.volume)} · ${r.cities}</div>`
-            ).join("")}</div>
-          </div>`
-        : "";
       const modules = GOFO_SECTIONS.map(([key, title]) => {
         const rows = latestRows
           .filter((r) => r.section === key)
@@ -1613,7 +1605,15 @@
         }).join("");
         return `<div class="city-module"><p class="city-module-title">${title}</p><div class="grid">${body}</div></div>`;
       }).join("");
-      $("gofo-tiles").innerHTML = mixedHtml + modules;
+      const mixedHtml = (mixedRows || []).length
+        ? `<div class="city-module">
+            <div class="gofo-mixed">${mixedRows.map((r) => {
+              const cities = String(r.cities || "").replace(/,/g, "");
+              return `<div class="gofo-mixed-row">Chute ${r.chute_id} (${cities}) - ${fmt(r.volume)}</div>`;
+            }).join("")}</div>
+          </div>`
+        : "";
+      $("gofo-tiles").innerHTML = modules + mixedHtml;
     }
 
     function syncGofoTileSelection() {
