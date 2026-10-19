@@ -50,7 +50,29 @@
     .bar { height: 4px; background: rgba(255,255,255,0.08); border-radius: 2px; margin: 0.8rem 0 1.2rem; }
     .bar > div { height: 4px; background: var(--amber); border-radius: 2px; }
     .panel { border: 1px solid var(--line); background: rgba(0,0,0,0.18); padding: 0.4rem; }
-    #city-chart, #hourly-chart, #station-chart { width: 100%; height: 420px; }
+    #city-chart, #hourly-chart { width: 100%; height: 420px; }
+    #station-chart { width: 100%; height: 460px; }
+    .feed-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.7rem 1rem;
+      padding: 0.2rem 0.15rem 1rem;
+      font-size: 0.8rem;
+      line-height: 1.5;
+      color: #d7e0d9;
+    }
+    .feed-legend span {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      white-space: nowrap;
+    }
+    .feed-legend i {
+      width: 0.72rem;
+      height: 0.72rem;
+      border-radius: 2px;
+      flex: none;
+    }
     .modules { display: grid; gap: 1.15rem; margin-top: 1rem; }
     .module-title { margin: 0 0 0.55rem; font-size: 0.85rem; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; }
     .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 0.65rem; }
@@ -107,7 +129,7 @@
         <p class="caption" id="period-caption"></p>
         <div class="feed-wrap">
           <div>
-            <div class="panel"><div id="station-chart"></div></div>
+            <div class="panel"><div id="station-legend" class="feed-legend"></div><div id="station-chart"></div></div>
             <p class="caption" id="totals-caption"></p>
             <div class="grid" id="period-totals"></div>
           </div>
@@ -340,7 +362,13 @@ function renderFeed() {
   const view = viewState();
   const periodBlock = document.getElementById("period-block");
   periodBlock.classList.toggle("hidden", !view.periods.length);
-  if (!view.periods.length) return;
+  if (!view.periods.length) {
+    document.getElementById("station-legend").innerHTML = "";
+    return;
+  }
+  document.getElementById("station-legend").innerHTML = view.shown.map((period, index) =>
+    `<span><i style="background:${COLORS[index % COLORS.length]}"></i>${period.label}</span>`
+  ).join("");
   document.getElementById("period-caption").textContent = view.hourPeriod
     ? `${view.hourPeriod.label}. Each bar is that station's packages in this period. Playback shows one period at a time, then returns to All Day.`
     : "All day. Each bar stacks every period for that station. Y-axis is packages. The period list stays clickable.";
@@ -352,6 +380,8 @@ function renderFeed() {
     marker: { color: COLORS[index % COLORS.length] },
   })), {
     ...baseLayout,
+    showlegend: false,
+    margin: { l: 58, r: 20, t: 28, b: 90 },
     barmode: "stack",
     yaxis: { ...axis, title: "Packages" },
     xaxis: { ...axis, tickangle: -25 },
