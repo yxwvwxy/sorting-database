@@ -1631,16 +1631,32 @@
       }).join("")}</div>`;
     }
 
+    function warehouseVolume(latestRows, mixed, sections, warehouse) {
+      const tileSum = latestRows
+        .filter((r) => sections.includes(r.section))
+        .reduce((sum, r) => sum + Number(r.total_volume || 0), 0);
+      const mixedSum = mixed
+        .filter((r) => r.warehouse === warehouse)
+        .reduce((sum, r) => sum + Number(r.volume || 0), 0);
+      return tileSum + mixedSum;
+    }
+
     function renderGofoTiles(latestRows, mixedRows) {
       const mixed = mixedRows || [];
       const jfkMixed = mixed.filter((r) => r.warehouse === "JFK175");
       const otherMixed = mixed.filter((r) => r.warehouse !== "JFK175");
+      const bwiTotal = warehouseVolume(latestRows, mixed, ["bwi"], "BWI.H");
+      const ewrTotal = warehouseVolume(latestRows, mixed, ["ewr_one", "ewr_multi"], "EWR.H");
       const modules = GOFO_SECTIONS.map(([key, title]) => {
         const rows = latestRows
           .filter((r) => r.section === key)
           .sort((a, b) => a.code.localeCompare(b.code));
         const sectionMixed = key === "jfk_pwm" ? jfkMixed : [];
         if (!rows.length && !sectionMixed.length) return "";
+        if (key === "bwi") title = `BWI.H - ${fmt(bwiTotal)}`;
+        const ewrLine = key === "ewr_multi"
+          ? `<p class="city-module-title">EWR.H - ${fmt(ewrTotal)}</p>`
+          : "";
         const body = rows.map((r) => {
           if (r.section === "uni_hub" && GOFO_ROLLUP[r.code]) {
             const partMap = new Map(gofoUniPartLatest.map((part) => [part.code, part]));
@@ -1655,7 +1671,7 @@
           }
           return tileHtml(r.code, r.total_volume, r.delta_volume, null, gofoChartSelection, r.city);
         }).join("");
-        return `<div class="city-module"><p class="city-module-title">${title}</p><div class="grid">${body}</div>${gofoMixedHtml(sectionMixed)}</div>`;
+        return `<div class="city-module">${ewrLine}<p class="city-module-title">${title}</p><div class="grid">${body}</div>${gofoMixedHtml(sectionMixed)}</div>`;
       }).join("");
       const mixedHtml = otherMixed.length
         ? `<div class="city-module">${gofoMixedHtml(otherMixed)}</div>`
