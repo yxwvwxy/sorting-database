@@ -436,9 +436,30 @@
     </div>
 
     <nav id="app-tabs" class="app-tabs hidden" aria-label="Dashboard sections">
-      <button type="button" class="app-tab" data-tab="city" id="tab-city">City / hub</button>
+      <button type="button" class="app-tab" data-tab="gofo" id="tab-gofo">Gofo</button>
       <button type="button" class="app-tab" data-tab="feed" id="tab-feed">Feed &amp; hourly</button>
+      <button type="button" class="app-tab" data-tab="city" id="tab-city">City / hub</button>
     </nav>
+
+    <section id="gofo-section" class="section hidden">
+      <h2>Gofo</h2>
+      <div class="controls">
+        <label>Batch / ops day
+          <select id="gofo-batch"></select>
+        </label>
+        <label>&nbsp;
+          <button id="gofo-reload" type="button">Refresh</button>
+        </label>
+      </div>
+      <div id="gofo-meta" class="meta"></div>
+      <p id="gofo-error" class="error hidden"></p>
+      <h2>Latest city totals</h2>
+      <p class="caption">Mapped from chute_destination_gofo. Cities that share the same first 3 letters are one city, so LGA01 and LGA02 both show as LGA. Click a city to plot its growth.</p>
+      <div id="gofo-tiles"></div>
+      <h2 style="margin-top:1.35rem">Growth chart</h2>
+      <p id="gofo-chart-caption" class="caption">Showing the three largest cities</p>
+      <div class="panel"><div id="gofo-chart"></div></div>
+    </section>
 
     <section id="city-section" class="section hidden">
       <h2>City / hub</h2>
@@ -540,6 +561,8 @@
       ...CITY_ROLLED_PARTS,
     ]);
     const CITY_CHART_DEFAULT = ["EWR", "CT", "AT"];
+    const CITY_HUB_LAST_OPS_DAY = "2026-10-16";
+    const GOFO_FIRST_OPS_DAY = "2026-10-18";
 
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     const $ = (id) => document.getElementById(id);
@@ -548,6 +571,7 @@
     let roles = [];
     let batches = [];
     let feedBatches = [];
+    let gofoBatches = [];
     let feedLayers = []; // per-station hourly totals
     let feedHourTabs = []; // :30 hour buckets
     let feedLatest = [];
@@ -556,7 +580,10 @@
     let hourlyPlotReady = false;
     let cityChartModel = { series: [], cities: [] };
     let cityChartSelection = CITY_CHART_DEFAULT.slice();
-    let activeTab = "city";
+    let gofoChartModel = { series: [], cities: [] };
+    let gofoChartSelection = [];
+    let gofoChartDefault = [];
+    let activeTab = "gofo";
     let userPickedTab = false;
 
     function normalizeUsername(username) {
@@ -588,8 +615,16 @@
 
     function defaultTabFromUser(user) {
       const raw = String(user?.app_metadata?.default_tab || "").toLowerCase();
-      if (raw === "feed" || raw === "city") return raw;
-      return "city";
+      if (raw === "feed" || raw === "city" || raw === "gofo") return raw;
+      return "gofo";
+    }
+
+    function visibleTabs() {
+      const tabs = [];
+      if (hasRole("city") || hasRole("feed")) tabs.push("gofo");
+      if (hasRole("feed")) tabs.push("feed");
+      if (hasRole("city")) tabs.push("city");
+      return tabs;
     }
 
     function hasRole(name) {
@@ -600,6 +635,7 @@
       if (!window.Plotly) return;
       requestAnimationFrame(() => {
         try {
+          if (activeTab === "gofo" && visibleTabs().includes("gofo")) Plotly.Plots.resize("gofo-chart");
           if (activeTab === "city" && hasRole("city")) Plotly.Plots.resize("chart");
           if (activeTab === "feed" && hasRole("feed")) {
             Plotly.Plots.resize("hourly-chart");
@@ -610,24 +646,20 @@
     }
 
     function setActiveTab(tab) {
-      const canCity = hasRole("city");
-      const canFeed = hasRole("feed");
-      if (tab === "city" && !canCity) tab = canFeed ? "feed" : "city";
-      if (tab === "feed" && !canFeed) tab = canCity ? "city" : "feed";
+      const tabs = visibleTabs();
+      if (!tabs.includes(tab)) tab = tabs[0] || "gofo";
       activeTab = tab;
 
-      $("city-section").classList.toggle("hidden", !(canCity && tab === "city"));
-      $("feed-section").classList.toggle("hidden", !(canFeed && tab === "feed"));
+      $("gofo-section").classList.toggle("hidden", tab !== "gofo");
+      $("feed-section").classList.toggle("hidden", tab !== "feed");
+      $("city-section").classList.toggle("hidden", tab !== "city");
+      $("app-tabs").classList.toggle("hidden", tabs.length < 2);
 
-      const tabCity = $("tab-city");
-      const tabFeed = $("tab-feed");
-      if (tabCity) {
-        tabCity.classList.toggle("hidden", !canCity);
-        tabCity.classList.toggle("active", tab === "city");
-      }
-      if (tabFeed) {
-        tabFeed.classList.toggle("hidden", !canFeed);
-        tabFeed.classList.toggle("active", tab === "feed");
+      for (const name of ["gofo", "feed", "city"]) {
+        const btn = $(`tab-${name}`);
+        if (!btn) continue;
+        btn.classList.toggle("hidden", !tabs.includes(name));
+        btn.classList.toggle("active", tab === name);
       }
       resizeVisibleCharts();
     }
@@ -910,20 +942,15 @@
       if (!authed) return;
       $("user-email").textContent = displayName(session.user);
       roles = userRoles(session.user);
-      const canCity = hasRole("city");
-      const canFeed = hasRole("feed");
-      // Only show the tab bar when the user can switch (both roles).
-      $("app-tabs").classList.toggle("hidden", !(canCity && canFeed));
-      if (canCity && canFeed) {
-        setActiveTab(userPickedTab ? activeTab : defaultTabFromUser(session.user));
-      } else if (canFeed) {
-        setActiveTab("feed");
-      } else if (canCity) {
-        setActiveTab("city");
-      } else {
+      const tabs = visibleTabs();
+      if (!tabs.length) {
+        $("app-tabs").classList.add("hidden");
+        $("gofo-section").classList.add("hidden");
         $("city-section").classList.add("hidden");
         $("feed-section").classList.add("hidden");
+        return;
       }
+      setActiveTab(userPickedTab ? activeTab : defaultTabFromUser(session.user));
     }
 
     function renderMeta(batch, elId) {
@@ -955,10 +982,10 @@
       return { total_volume: total, delta_volume: delta, breakdown };
     }
 
-    function tileHtml(code, totalVolume, deltaVolume, breakdown) {
+    function tileHtml(code, totalVolume, deltaVolume, breakdown, selection = cityChartSelection) {
       const d = Number(deltaVolume || 0);
       const delta = d >= 0 ? `+${fmt(d)}` : fmt(d);
-      const selected = cityChartSelection.includes(code) ? " selected" : "";
+      const selected = selection.includes(code) ? " selected" : "";
       const detail = breakdown
         ? `<div class="breakdown">${breakdown.map((b) => `${b.city} ${fmt(b.total_volume)}`).join("<br>")}</div>`
         : "";
@@ -1084,9 +1111,9 @@
       return { series: merged, cities: order };
     }
 
-    function renderChart(series, cities) {
+    function renderChart(series, cities, plotId = "chart") {
       if (!cities.length) {
-        Plotly.purge("chart");
+        Plotly.purge(plotId);
         return;
       }
       const traces = cities.map((city, i) => {
@@ -1104,7 +1131,7 @@
           hovertemplate: `%{x} ET<br>${city}: %{y:,}<extra></extra>`,
         };
       });
-      Plotly.newPlot("chart", traces, {
+      Plotly.newPlot(plotId, traces, {
         margin: { l: 50, r: 20, t: 20, b: 50 },
         paper_bgcolor: "rgba(0,0,0,0)",
         plot_bgcolor: "rgba(0,0,0,0)",
@@ -1135,7 +1162,10 @@
     async function loadBatchesInto(selectId, storeKey) {
       const cutoff = etDaysAgoYmd(6);
       const all = await rpc("list_scrape_batches", { p_limit: 100 });
-      const filtered = all.filter((b) => String(b.subbatch_date || "") >= cutoff);
+      let filtered = all.filter((b) => String(b.subbatch_date || "") >= cutoff);
+      if (storeKey === "city") {
+        filtered = filtered.filter((b) => String(b.subbatch_date || "") <= CITY_HUB_LAST_OPS_DAY);
+      }
       if (storeKey === "city") batches = filtered;
       else feedBatches = filtered;
       const sel = $(selectId);
@@ -1154,7 +1184,7 @@
     async function loadCitySeries() {
       showError("error", null);
       const batch = batches[Number($("batch").value)];
-      if (!batch) return;
+      if (!batch || String(batch.subbatch_date || "") > CITY_HUB_LAST_OPS_DAY) return;
       renderMeta(batch, "meta");
       let series = await rpc("city_volume_series", { p_subbatch: batch.subbatch });
       series = series.filter((r) => r.city !== "Unmapped");
@@ -1491,8 +1521,102 @@
       renderFeedChart();
     }
 
+    function gofoDefaultCities(latestRows) {
+      return [...latestRows]
+        .sort((a, b) => Number(b.total_volume) - Number(a.total_volume) || a.city.localeCompare(b.city))
+        .slice(0, 3)
+        .map((r) => r.city);
+    }
+
+    function renderGofoTiles(latestRows) {
+      const rows = [...latestRows].sort((a, b) =>
+        Number(b.total_volume) - Number(a.total_volume) || a.city.localeCompare(b.city)
+      );
+      $("gofo-tiles").innerHTML = `<div class="grid">${rows.map((r) =>
+        tileHtml(r.city, r.total_volume, r.delta_volume, null, gofoChartSelection)
+      ).join("")}</div>`;
+    }
+
+    function syncGofoTileSelection() {
+      document.querySelectorAll("#gofo-tiles .tile[data-city]").forEach((el) => {
+        el.classList.toggle("selected", gofoChartSelection.includes(el.dataset.city));
+      });
+      const cap = $("gofo-chart-caption");
+      if (cap) {
+        cap.textContent = gofoChartSelection.length
+          ? `Showing ${gofoChartSelection.join(", ")}`
+          : "Select a city tile to plot growth";
+      }
+    }
+
+    function applyGofoChart() {
+      if (!gofoChartModel.series.length) {
+        Plotly.purge("gofo-chart");
+        syncGofoTileSelection();
+        return;
+      }
+      const available = new Set(gofoChartModel.cities);
+      const cities = gofoChartSelection.filter((c) => available.has(c));
+      renderChart(gofoChartModel.series, cities, "gofo-chart");
+      syncGofoTileSelection();
+    }
+
+    function onGofoTileActivate(city) {
+      if (!city) return;
+      if (gofoChartSelection.length === 1 && gofoChartSelection[0] === city) {
+        gofoChartSelection = gofoChartDefault.slice();
+      } else {
+        gofoChartSelection = [city];
+      }
+      applyGofoChart();
+    }
+
+    async function loadGofoBatches() {
+      const cutoff = etDaysAgoYmd(6);
+      const all = await rpc("list_gofo_batches", { p_limit: 100 });
+      gofoBatches = all.filter((b) =>
+        String(b.subbatch_date || "") >= cutoff &&
+        String(b.subbatch_date || "") >= GOFO_FIRST_OPS_DAY
+      );
+      $("gofo-batch").innerHTML = gofoBatches.map((b, i) => {
+        const label = `${b.subbatch_date} · ${b.subbatch} · ${b.scrape_count} snaps · ${fmt(b.latest_total)}`;
+        return `<option value="${i}">${label}</option>`;
+      }).join("");
+    }
+
+    async function loadGofoSeries() {
+      showError("gofo-error", null);
+      const batch = gofoBatches[Number($("gofo-batch").value)];
+      if (!batch || String(batch.subbatch_date || "") < GOFO_FIRST_OPS_DAY) return;
+      renderMeta(batch, "gofo-meta");
+      let series = await rpc("gofo_city_volume_series", { p_subbatch: batch.subbatch });
+      series = series.filter((r) => r.city && r.city !== "Unmapped");
+      if (!series.length) {
+        $("gofo-tiles").innerHTML = "";
+        gofoChartModel = { series: [], cities: [] };
+        gofoChartSelection = [];
+        gofoChartDefault = [];
+        Plotly.purge("gofo-chart");
+        syncGofoTileSelection();
+        showError("gofo-error", new Error("No Gofo city rows for this batch."));
+        return;
+      }
+      const latestTs = series.reduce((m, r) => (r.scraped_at > m ? r.scraped_at : m), series[0].scraped_at);
+      const latest = series.filter((r) => r.scraped_at === latestTs);
+      const cities = [...new Set(series.map((r) => r.city))].sort((a, b) => a.localeCompare(b));
+      gofoChartModel = { series, cities };
+      gofoChartDefault = gofoDefaultCities(latest);
+      gofoChartSelection = gofoChartDefault.slice();
+      renderGofoTiles(latest);
+      applyGofoChart();
+    }
+
     async function bootApp() {
       try {
+        if (visibleTabs().includes("gofo")) {
+          await loadGofoBatches();
+          await loadGofoSeries();
+        }
         if (hasRole("city")) {
           await loadBatchesInto("batch", "city");
           await loadCitySeries();
@@ -1502,6 +1626,7 @@
           await loadFeedSeries();
         }
       } catch (err) {
+        if (visibleTabs().includes("gofo")) showError("gofo-error", err);
         if (hasRole("city")) showError("error", err);
         if (hasRole("feed")) showError("feed-error", err);
       }
@@ -1532,6 +1657,22 @@
       if (!tile) return;
       event.preventDefault();
       onCityTileActivate(tile.dataset.city);
+    });
+    $("gofo-batch").addEventListener("change", () => loadGofoSeries().catch((e) => showError("gofo-error", e)));
+    $("gofo-reload").addEventListener("click", () => {
+      loadGofoBatches().then(loadGofoSeries).catch((e) => showError("gofo-error", e));
+    });
+    $("gofo-tiles").addEventListener("click", (event) => {
+      const tile = event.target.closest(".tile[data-city]");
+      if (!tile) return;
+      onGofoTileActivate(tile.dataset.city);
+    });
+    $("gofo-tiles").addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      const tile = event.target.closest(".tile[data-city]");
+      if (!tile) return;
+      event.preventDefault();
+      onGofoTileActivate(tile.dataset.city);
     });
     $("feed-batch").addEventListener("change", () => loadFeedSeries().catch((e) => showError("feed-error", e)));
     $("feed-reload").addEventListener("click", () => {
@@ -1585,18 +1726,24 @@
         roles = [];
         batches = [];
         feedBatches = [];
+        gofoBatches = [];
         cityChartModel = { series: [], cities: [] };
         cityChartSelection = CITY_CHART_DEFAULT.slice();
-        activeTab = "city";
+        gofoChartModel = { series: [], cities: [] };
+        gofoChartSelection = [];
+        gofoChartDefault = [];
+        activeTab = "gofo";
         userPickedTab = false;
         $("app-tabs").classList.add("hidden");
         $("tiles").innerHTML = "";
+        $("gofo-tiles").innerHTML = "";
         $("upper-cards").innerHTML = "";
         $("lower-cards").innerHTML = "";
         $("hourly-total").textContent = "—";
         $("hourly-avg").textContent = "—";
         if (window.Plotly) {
           Plotly.purge("chart");
+          Plotly.purge("gofo-chart");
           Plotly.purge("feed-chart");
           Plotly.purge("hourly-chart");
         }
