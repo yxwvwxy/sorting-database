@@ -125,6 +125,10 @@
       grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
       gap: 0.65rem;
     }
+    .grid.jfk-grid {
+      grid-template-columns: max-content minmax(140px, 1fr);
+    }
+    .tile.wide .breakdown { white-space: nowrap; }
     .tile {
       border: 1px solid var(--line);
       background: linear-gradient(160deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015));
@@ -1004,7 +1008,8 @@
       const detail = lines.length
         ? `<div class="breakdown">${lines.join("<br>")}</div>`
         : "";
-      return `<div class="tile${selected}" data-city="${dataKey}" role="button" tabindex="0" title="Show ${code} growth">
+      const wide = extraLines.length ? " wide" : "";
+      return `<div class="tile${selected}${wide}" data-city="${dataKey}" role="button" tabindex="0" title="Show ${code} growth">
           <div class="code">${code}</div>
           <div class="vol">${fmt(totalVolume)}</div>
           <div class="delta">last Δ ${delta}</div>
@@ -1689,7 +1694,8 @@
           }
           return tileHtml(r.code, r.total_volume, r.delta_volume, null, gofoChartSelection, r.city);
         }).join("");
-        return `<div class="city-module">${ewrLine}<p class="${titleClass}">${title}</p><div class="grid">${body}</div></div>`;
+        const gridClass = key === "jfk_pwm" ? "grid jfk-grid" : "grid";
+        return `<div class="city-module">${ewrLine}<p class="${titleClass}">${title}</p><div class="${gridClass}">${body}</div></div>`;
       }).join("");
       const mixedHtml = otherMixed.length
         ? `<div class="city-module">${gofoMixedHtml(otherMixed)}</div>`
