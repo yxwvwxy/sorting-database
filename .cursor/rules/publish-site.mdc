@@ -1,0 +1,13 @@
+---
+description: Push dashboard changes to GitHub Pages without waiting to be asked
+alwaysApply: true
+---
+
+# Publish the site after a change
+
+When a requested change updates the live dashboard, commit it and push `main` in the same turn. Do not wait for a separate push request.
+
+- The live site is https://yxwvwxy.github.io/sorting-database/ and deploys `docs/` on push to `main`.
+- Keep `web/index.html` in sync with `docs/index.html`.
+- Include the migration files for database changes that were already applied for that request.
+- Do not commit secrets. Do not force-push.
