@@ -463,7 +463,7 @@
       <div id="gofo-meta" class="meta"></div>
       <p id="gofo-error" class="error hidden"></p>
       <h2>Latest city totals</h2>
-      <p class="caption">JFK175 volume is under JFK/PWM (7pm). The JFK tile lists each city. PWM is its own tile. A chute that lists more than one city is listed on its own and is not added into any one city.</p>
+      <p class="caption">JFK175 volume is under JFK/PWM (7pm outbound). The JFK tile lists each city. PWM is its own tile. A chute that lists more than one city is listed on its own and is not added into any one city.</p>
       <div id="gofo-tiles" class="city-modules"></div>
       <h2 style="margin-top:1.35rem">Growth chart</h2>
       <p id="gofo-chart-caption" class="caption">Showing JFK, PWM</p>
@@ -1535,7 +1535,7 @@
 
     const GOFO_SECTIONS = [
       ["uni_hub", "uni hub"],
-      ["jfk_pwm", "JFK/PWM (7pm)"],
+      ["jfk_pwm", "JFK/PWM (7pm outbound)"],
       ["bwi", "BWI.H"],
       ["ewr_one", "EWR.H · one route"],
       ["ewr_multi", "EWR.H · multiple routes"],
@@ -1654,10 +1654,10 @@
           .sort((a, b) => a.code.localeCompare(b.code));
         const sectionMixed = key === "jfk_pwm" ? jfkMixed : [];
         if (!rows.length && !sectionMixed.length) return "";
-        if (key === "bwi") title = `BWI.H (8am-7pm) - ${fmt(bwiTotal)}`;
+        if (key === "bwi") title = `BWI.H (8am-7pm outbound) - ${fmt(bwiTotal)}`;
         const titleClass = key === "bwi" || key === "jfk_pwm" ? "city-module-title plain" : "city-module-title";
-        const ewrLine = key === "ewr_multi"
-          ? `<p class="city-module-title plain">EWR.H (9am-11pm) - ${fmt(ewrTotal)}</p>`
+        const ewrLine = key === "ewr_one"
+          ? `<p class="city-module-title plain">EWR.H (9am-11pm outbound) - ${fmt(ewrTotal)}</p>`
           : "";
         const body = rows.map((r) => {
           if (r.section === "uni_hub" && GOFO_ROLLUP[r.code]) {
