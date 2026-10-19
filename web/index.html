@@ -188,6 +188,7 @@
       font-family: "IBM Plex Mono", monospace;
       font-size: 0.92rem;
     }
+    .city-module .gofo-mixed { margin-top: 0.75rem; }
     .gofo-mixed-row strong { color: var(--amber); font-weight: 500; }
     .hourly-log {
       margin: 0 0 1.25rem;
@@ -461,7 +462,7 @@
       <div id="gofo-meta" class="meta"></div>
       <p id="gofo-error" class="error hidden"></p>
       <h2>Latest city totals</h2>
-      <p class="caption">Each city is shown separately. Cities that share the first 3 letters are combined. A chute that lists more than one city is listed on its own, with its volume and cities, and is not added into any one city.</p>
+      <p class="caption">JFK175 volume is under JFK / PWM. The JFK tile lists each city. PWM is its own tile. A chute that lists more than one city is listed on its own and is not added into any one city.</p>
       <div id="gofo-tiles" class="city-modules"></div>
       <h2 style="margin-top:1.35rem">Growth chart</h2>
       <p id="gofo-chart-caption" class="caption">Showing JFK, PWM</p>
@@ -591,6 +592,7 @@
     let gofoChartSelection = [];
     let gofoChartDefault = [];
     let gofoUniPartLatest = [];
+    let gofoJfkPartLatest = [];
     let activeTab = "gofo";
     let userPickedTab = false;
 
@@ -1582,6 +1584,38 @@
       ];
     }
 
+    function rollupJfkSeries(series) {
+      const parts = [...new Set(
+        series.filter((r) => r.section === "jfk_pwm" && r.code !== "PWM").map((r) => r.code)
+      )];
+      if (!parts.length) return series;
+      const hide = new Set(parts);
+      const byTs = new Map();
+      for (const r of series) {
+        if (r.section !== "jfk_pwm" || !hide.has(r.code)) continue;
+        let row = byTs.get(r.scraped_at);
+        if (!row) {
+          row = {
+            subbatch: r.subbatch,
+            subbatch_date: r.subbatch_date,
+            scraped_at: r.scraped_at,
+            section: "jfk_pwm",
+            code: "JFK",
+            city: "jfk_pwm|JFK",
+            total_volume: 0,
+            delta_volume: 0,
+          };
+          byTs.set(r.scraped_at, row);
+        }
+        row.total_volume += Number(r.total_volume || 0);
+        row.delta_volume += Number(r.delta_volume || 0);
+      }
+      return [
+        ...series.filter((r) => !(r.section === "jfk_pwm" && hide.has(r.code))),
+        ...byTs.values(),
+      ];
+    }
+
     function gofoDefaultCities(latestRows) {
       return ["JFK", "PWM"]
         .map((code) => latestRows.find((r) => r.section === "jfk_pwm" && r.code === code))
@@ -1589,29 +1623,42 @@
         .map((r) => r.city);
     }
 
+    function gofoMixedHtml(rows) {
+      if (!rows.length) return "";
+      return `<div class="gofo-mixed">${rows.map((r) => {
+        const cities = String(r.cities || "").replace(/,/g, "");
+        return `<div class="gofo-mixed-row">Chute ${r.chute_id} (${cities}) - ${fmt(r.volume)}</div>`;
+      }).join("")}</div>`;
+    }
+
     function renderGofoTiles(latestRows, mixedRows) {
+      const mixed = mixedRows || [];
+      const jfkMixed = mixed.filter((r) => r.warehouse === "JFK175");
+      const otherMixed = mixed.filter((r) => r.warehouse !== "JFK175");
       const modules = GOFO_SECTIONS.map(([key, title]) => {
         const rows = latestRows
           .filter((r) => r.section === key)
           .sort((a, b) => a.code.localeCompare(b.code));
-        if (!rows.length) return "";
+        const sectionMixed = key === "jfk_pwm" ? jfkMixed : [];
+        if (!rows.length && !sectionMixed.length) return "";
         const body = rows.map((r) => {
           if (r.section === "uni_hub" && GOFO_ROLLUP[r.code]) {
             const partMap = new Map(gofoUniPartLatest.map((part) => [part.code, part]));
             const summed = sumCityParts(partMap, GOFO_ROLLUP[r.code]);
             return tileHtml(r.code, summed.total_volume, summed.delta_volume, summed.breakdown, gofoChartSelection, r.city);
           }
+          if (r.section === "jfk_pwm" && r.code === "JFK" && gofoJfkPartLatest.length) {
+            const partMap = new Map(gofoJfkPartLatest.map((part) => [part.code, part]));
+            const parts = [...partMap.keys()].sort((a, b) => a.localeCompare(b));
+            const summed = sumCityParts(partMap, parts);
+            return tileHtml(r.code, summed.total_volume, summed.delta_volume, summed.breakdown, gofoChartSelection, r.city);
+          }
           return tileHtml(r.code, r.total_volume, r.delta_volume, null, gofoChartSelection, r.city);
         }).join("");
-        return `<div class="city-module"><p class="city-module-title">${title}</p><div class="grid">${body}</div></div>`;
+        return `<div class="city-module"><p class="city-module-title">${title}</p><div class="grid">${body}</div>${gofoMixedHtml(sectionMixed)}</div>`;
       }).join("");
-      const mixedHtml = (mixedRows || []).length
-        ? `<div class="city-module">
-            <div class="gofo-mixed">${mixedRows.map((r) => {
-              const cities = String(r.cities || "").replace(/,/g, "");
-              return `<div class="gofo-mixed-row">Chute ${r.chute_id} (${cities}) - ${fmt(r.volume)}</div>`;
-            }).join("")}</div>
-          </div>`
+      const mixedHtml = otherMixed.length
+        ? `<div class="city-module">${gofoMixedHtml(otherMixed)}</div>`
         : "";
       $("gofo-tiles").innerHTML = modules + mixedHtml;
     }
@@ -1694,6 +1741,7 @@
         gofoChartSelection = [];
         gofoChartDefault = [];
         gofoUniPartLatest = [];
+        gofoJfkPartLatest = [];
         Plotly.purge("gofo-chart");
         syncGofoTileSelection();
         showError("gofo-error", new Error("No Gofo city rows for this batch."));
@@ -1702,7 +1750,8 @@
       const latestTs = series.reduce((m, r) => (r.scraped_at > m ? r.scraped_at : m), series[0]?.scraped_at || "");
       const latestRaw = series.filter((r) => r.scraped_at === latestTs);
       gofoUniPartLatest = latestRaw.filter((r) => r.section === "uni_hub");
-      series = rollupGofoSeries(series);
+      gofoJfkPartLatest = latestRaw.filter((r) => r.section === "jfk_pwm" && r.code !== "PWM");
+      series = rollupJfkSeries(rollupGofoSeries(series));
       const latest = series.filter((r) => r.scraped_at === latestTs);
       const cities = [...new Set(series.map((r) => r.city))].sort((a, b) => a.localeCompare(b));
       gofoChartModel = { series, cities };
@@ -1834,6 +1883,7 @@
         gofoChartSelection = [];
         gofoChartDefault = [];
         gofoUniPartLatest = [];
+        gofoJfkPartLatest = [];
         activeTab = "gofo";
         userPickedTab = false;
         $("app-tabs").classList.add("hidden");
