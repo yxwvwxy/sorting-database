@@ -535,7 +535,7 @@
         <div class="panel"><div id="hourly-chart"></div></div>
       </div>
 
-      <p class="caption">每个百分比是该扫描台当前累计货量占 10 个扫描台累计货量之和的比例，不是相比上一小时的增长率。</p>
+      <p class="caption">Each percentage is that station's current cumulative volume as a share of all 10 stations, not the change from the previous hour.</p>
       <div class="deck-block">
         <p class="deck-label">Upper deck</p>
         <div id="upper-cards" class="station-grid"></div>
@@ -1100,9 +1100,9 @@
       }).join("");
 
       $("tiles").innerHTML = [
-        module("7pm 转运", block7),
-        module("9pm 转运", block9),
-        module("大区", blockRegion),
+        module("7pm outbound", block7),
+        module("9pm outbound", block9),
+        module("Hubs", blockRegion),
         module("EWR / JFK", blockNyc),
       ].join("");
     }
