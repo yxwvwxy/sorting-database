@@ -1593,7 +1593,7 @@
       const modules = GOFO_SECTIONS.map(([key, title]) => {
         const rows = latestRows
           .filter((r) => r.section === key)
-          .sort((a, b) => Number(b.total_volume) - Number(a.total_volume) || a.code.localeCompare(b.code));
+          .sort((a, b) => a.code.localeCompare(b.code));
         if (!rows.length) return "";
         const body = rows.map((r) => {
           if (r.section === "uni_hub" && GOFO_ROLLUP[r.code]) {
