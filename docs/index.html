@@ -184,7 +184,29 @@
       font-family: "IBM Plex Mono", monospace;
       font-size: 0.85rem;
     }
-    #chart, #gofo-chart, #feed-chart, #hourly-chart { width: 100%; height: 460px; }
+    #chart, #gofo-chart, #hourly-chart { width: 100%; height: 460px; }
+    #feed-chart { width: 100%; height: 680px; }
+    .feed-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.7rem 1rem;
+      padding: 0.2rem 0.15rem 1rem;
+      font-size: 0.8rem;
+      line-height: 1.5;
+      color: #d7e0d9;
+    }
+    .feed-legend span {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      white-space: nowrap;
+    }
+    .feed-legend i {
+      width: 0.72rem;
+      height: 0.72rem;
+      border-radius: 2px;
+      flex: none;
+    }
     .gofo-mixed {
       display: grid;
       gap: 0.35rem;
@@ -363,7 +385,7 @@
       display: flex;
       flex-direction: column;
       gap: 0.35rem;
-      max-height: 460px;
+      max-height: 920px;
       overflow: auto;
     }
     .hour-axis .axis-title {
@@ -526,7 +548,7 @@
 
       <p class="caption">All Day = one stack per period, oldest at the x-axis. Tabs show time ranges (normally :30–:30; gaps/opening use actual scrape span). Click a stack for details.</p>
       <div class="feed-chart-wrap">
-        <div class="panel"><div id="feed-chart"></div></div>
+        <div class="panel"><div id="feed-legend" class="feed-legend"></div><div id="feed-chart"></div></div>
         <div class="hour-axis">
           <div class="axis-title">Period (ET)</div>
           <div id="hour-buttons"></div>
@@ -1405,6 +1427,7 @@
       const layers = visibleLayers();
       if (!keys.length) {
         feedPlotReady = false;
+        $("feed-legend").innerHTML = "";
         Plotly.purge("feed-chart");
         $("feed-chart").innerHTML = `<div style="padding:2rem;color:#9aa8a0;font-family:IBM Plex Mono,monospace;font-size:0.9rem;">
           Need at least 2 scrapes in this batch to build stacks.<br/>
@@ -1442,13 +1465,17 @@
         };
       });
 
+      $("feed-legend").innerHTML = keys.map((key, i) => (
+        `<span><i style="background:${COLORS[i % COLORS.length]}"></i>${key.shortLabel}</span>`
+      )).join("");
+
       const layout = {
         barmode: "stack",
-        margin: { l: 55, r: 20, t: 36, b: 90 },
+        margin: { l: 55, r: 20, t: 28, b: 90 },
         paper_bgcolor: "rgba(0,0,0,0)",
         plot_bgcolor: "rgba(0,0,0,0)",
         font: { family: "Outfit, sans-serif", color: "#dce6df" },
-        legend: { orientation: "h", y: 1.15, traceorder: "normal" },
+        showlegend: false,
         dragmode: false,
         xaxis: {
           tickangle: -25,
@@ -1525,6 +1552,7 @@
         $("upper-cards").innerHTML = "";
         $("lower-cards").innerHTML = "";
         $("hour-buttons").innerHTML = "";
+        $("feed-legend").innerHTML = "";
         Plotly.purge("feed-chart");
         feedPlotReady = false;
         showError("feed-error", new Error("No feed station rows for this batch."));
@@ -1633,10 +1661,14 @@
 
     function gofoMixedHtml(rows) {
       if (!rows.length) return "";
-      return `<div class="gofo-mixed">${rows.map((r) => {
+      return rows.map((r) => {
         const cities = String(r.cities || "").replace(/,/g, "");
-        return `<div class="gofo-mixed-row">Chute ${r.chute_id} (${cities}) - ${fmt(r.volume)}</div>`;
-      }).join("")}</div>`;
+        return `<p class="city-module-title">Chute ${r.chute_id} (${cities}) - ${fmt(r.volume)}</p>`;
+      }).join("");
+    }
+
+    function gofoRejectHtml(row) {
+      return `<p class="city-module-title">118 Reject - ${fmt(row ? row.volume : 0)}</p>`;
     }
 
     function warehouseVolume(latestRows, mixed, sections, warehouse) {
@@ -1652,7 +1684,8 @@
     function renderGofoTiles(latestRows, mixedRows) {
       const mixed = mixedRows || [];
       const jfkMixed = mixed.filter((r) => r.warehouse === "JFK175");
-      const otherMixed = mixed.filter((r) => r.warehouse !== "JFK175");
+      const rejectRow = mixed.find((r) => Number(r.chute_id) === 118);
+      const otherMixed = mixed.filter((r) => r.warehouse !== "JFK175" && Number(r.chute_id) !== 118);
       const bwiTotal = warehouseVolume(latestRows, mixed, ["bwi"], "BWI.H");
       const ewrTotal = warehouseVolume(latestRows, mixed, ["ewr_one", "ewr_multi"], "EWR.H");
       const modules = GOFO_SECTIONS.map(([key, title]) => {
@@ -1694,9 +1727,7 @@
         }).join("");
         return `<div class="city-module">${ewrLine}<p class="${titleClass}">${title}</p><div class="grid">${body}</div></div>`;
       }).join("");
-      const mixedHtml = otherMixed.length
-        ? `<div class="city-module">${gofoMixedHtml(otherMixed)}</div>`
-        : "";
+      const mixedHtml = `<div class="city-module">${gofoMixedHtml(otherMixed)}${gofoRejectHtml(rejectRow)}</div>`;
       $("gofo-tiles").innerHTML = modules + mixedHtml;
     }
 
