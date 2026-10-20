@@ -309,6 +309,22 @@ function section(title, html) {
   return `<div><p class="module-title">${title}</p><div class="grid">${html}</div></div>`;
 }
 
+function plottedMax(cities) {
+  let max = 0;
+  for (let at = 0; at < TIMES.length; at += 1) {
+    for (const city of cities) max = Math.max(max, read(TOTALS, at, city));
+  }
+  return Math.max(max * 1.08, 1);
+}
+function dayStationMax() {
+  const periods = feedPeriods(TIMES.length - 1);
+  let max = 0;
+  STATION_NAMES.forEach((_, index) => {
+    max = Math.max(max, periods.reduce((sum, period) => sum + (period.deltas[index] || 0), 0));
+  });
+  return Math.max(max * 1.08, 1);
+}
+
 function renderCity() {
   const categories = TIMES.slice(0, frame + 1);
   const traces = chartCities.map((city, index) => ({
@@ -321,8 +337,8 @@ function renderCity() {
   }));
   Plotly.react("city-chart", traces, {
     ...baseLayout,
-    yaxis: { ...axis, title: "Packages" },
-    xaxis: { ...axis, title: "ET scrape time" },
+    yaxis: { ...axis, title: "Packages", rangemode: "tozero", range: [0, plottedMax(chartCities)] },
+    xaxis: { ...axis, title: "ET scrape time", range: [-0.5, Math.max(categories.length - 0.5, 0.5)] },
   }, plotOpts);
   document.getElementById("city-caption").textContent = `Showing ${chartCities.join(", ")}. Y-axis is cumulative packages. X-axis is ET scrape time, drawn through the current frame. Click a city to plot it. Click empty space to restore EWR, CT, and AT.`;
   const leftovers = CITIES.filter((city) => !RESERVED.has(city)).sort();
@@ -344,20 +360,23 @@ function renderCity() {
 
 function renderFeed() {
   const hourly = hourlyStats(frame);
+  const finalHourly = hourlyStats(TIMES.length - 1);
+  const hourlyLabels = finalHourly.labels;
+  const hourlyBarMax = Math.max(...finalHourly.volumes, 1) * 1.08;
+  const hourlyCumMax = Math.max(...finalHourly.cumulative, 1) * 1.08;
+  const hourlyLayout = {
+    ...baseLayout,
+    barmode: "overlay",
+    yaxis: { ...axis, title: "Hourly packages", rangemode: "tozero", range: [0, hourlyBarMax] },
+    yaxis2: { ...axis, title: "Cumulative packages", overlaying: "y", side: "right", rangemode: "tozero", range: [0, hourlyCumMax] },
+    xaxis: { ...axis, title: "ET hour", range: [-0.5, hourlyLabels.length - 0.5], tickangle: -40, tickmode: hourly ? "auto" : "array", tickvals: hourly ? undefined : [] },
+  };
   const hourlyBlock = document.getElementById("hourly-block");
-  hourlyBlock.classList.toggle("hidden", !hourly);
-  if (hourly) {
-    Plotly.react("hourly-chart", [
-      { type: "bar", name: "Hourly volume", x: hourly.labels, y: hourly.volumes, marker: { color: "#b7a7d9" } },
-      { type: "scatter", mode: "lines+markers", name: "Cumulative volume", x: hourly.labels, y: hourly.cumulative, yaxis: "y2", line: { color: "#3ddc97", width: 2 } },
-    ], {
-      ...baseLayout,
-      barmode: "overlay",
-      yaxis: { ...axis, title: "Hourly packages" },
-      yaxis2: { ...axis, title: "Cumulative packages", overlaying: "y", side: "right" },
-      xaxis: { ...axis, title: "ET hour" },
-    }, plotOpts);
-  }
+  hourlyBlock.classList.remove("hidden");
+  Plotly.react("hourly-chart", [
+    { type: "bar", name: "Hourly volume", x: hourly ? hourly.labels : [], y: hourly ? hourly.volumes : [], marker: { color: "#b7a7d9" } },
+    { type: "scatter", mode: "lines+markers", name: "Cumulative volume", x: hourly ? hourly.labels : [], y: hourly ? hourly.cumulative : [], yaxis: "y2", line: { color: "#3ddc97", width: 2 } },
+  ], hourlyLayout, plotOpts);
   const deckTotal = STATION_VOLUMES[frame].reduce((sum, value) => sum + value, 0);
   document.getElementById("stations").innerHTML = STATION_NAMES.map((name, index) => {
     const volume = STATION_VOLUMES[frame][index] || 0;
@@ -366,9 +385,30 @@ function renderFeed() {
   }).join("");
   const view = viewState();
   const periodBlock = document.getElementById("period-block");
-  periodBlock.classList.toggle("hidden", !view.periods.length);
+  periodBlock.classList.remove("hidden");
+  const stationLayout = {
+    ...baseLayout,
+    showlegend: false,
+    margin: { l: 58, r: 20, t: 28, b: 90 },
+    barmode: "stack",
+    yaxis: { ...axis, title: "Packages", rangemode: "tozero", range: [0, dayStationMax()] },
+    xaxis: { ...axis, tickangle: -25 },
+  };
   if (!view.periods.length) {
-    document.getElementById("station-legend").innerHTML = "";
+    document.getElementById("station-legend").innerHTML = `<span><i style="background:${COLORS[0]}"></i>All Day</span>`;
+    document.getElementById("period-caption").textContent = "Feed stations start at 21:50. Y-axis is packages.";
+    Plotly.react("station-chart", [{
+      type: "bar",
+      name: "All Day",
+      x: STATION_NAMES,
+      y: STATION_NAMES.map(() => 0),
+      marker: { color: COLORS[0] },
+    }], stationLayout, plotOpts);
+    document.getElementById("totals-caption").textContent = "All-day station totals (pcs)";
+    document.getElementById("period-totals").innerHTML = STATION_NAMES.map((name) =>
+      `<div class="tile"><div class="code">${name}</div><div class="vol">${fmt(0)}</div></div>`
+    ).join("");
+    document.getElementById("periods").innerHTML = `<div class="caption" style="text-align:center">Period (ET)</div><button type="button" class="primary" data-period="all">All Day</button>`;
     return;
   }
   document.getElementById("station-legend").innerHTML = view.shown.map((period, index) =>
@@ -383,14 +423,7 @@ function renderFeed() {
     x: STATION_NAMES,
     y: period.deltas,
     marker: { color: COLORS[index % COLORS.length] },
-  })), {
-    ...baseLayout,
-    showlegend: false,
-    margin: { l: 58, r: 20, t: 28, b: 90 },
-    barmode: "stack",
-    yaxis: { ...axis, title: "Packages" },
-    xaxis: { ...axis, tickangle: -25 },
-  }, plotOpts);
+  })), stationLayout, plotOpts);
   const totals = STATION_NAMES.map((_, index) => view.shown.reduce((sum, period) => sum + (period.deltas[index] || 0), 0));
   document.getElementById("totals-caption").textContent = view.hourPeriod
     ? `${view.hourPeriod.label} station totals (pcs)`
