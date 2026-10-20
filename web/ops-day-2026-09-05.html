@@ -94,7 +94,9 @@
     .hour-axis button { width: 100%; text-align: left; font-weight: 500; font-size: 0.82rem; }
     .hidden { display: none; }
     body.record .toolbar { display: none; }
-    body.record #app { width: min(1880px, calc(100% - 1.2rem)); }
+    body.record #app { width: calc(100% - 1.2rem); max-width: none; }
+    body.record #city-chart, body.record #hourly-chart { height: 520px; }
+    body.record #station-chart { height: 560px; }
     body.record .record-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0.8rem; align-items: start; }
     @media (max-width: 800px) { .feed-wrap { grid-template-columns: 1fr; } }
   </style>
@@ -325,6 +327,11 @@ function dayStationMax() {
   return Math.max(max * 1.08, 1);
 }
 
+function chartBox(id) {
+  const width = document.getElementById(id).clientWidth;
+  return width > 0 ? width : undefined;
+}
+
 function renderCity() {
   const categories = TIMES.slice(0, frame + 1);
   const traces = chartCities.map((city, index) => ({
@@ -337,8 +344,10 @@ function renderCity() {
   }));
   Plotly.react("city-chart", traces, {
     ...baseLayout,
+    width: chartBox("city-chart"),
+    margin: { ...baseLayout.margin, b: 78 },
     yaxis: { ...axis, title: "Packages", rangemode: "tozero", range: [0, plottedMax(chartCities)] },
-    xaxis: { ...axis, title: "ET scrape time", range: [-0.5, Math.max(categories.length - 0.5, 0.5)] },
+    xaxis: { ...axis, title: "ET scrape time", tickangle: -90, tickfont: { size: 10 }, automargin: true, range: [-0.5, Math.max(categories.length - 0.5, 0.5)] },
   }, plotOpts);
   document.getElementById("city-caption").textContent = `Showing ${chartCities.join(", ")}. Y-axis is cumulative packages. X-axis is ET scrape time, drawn through the current frame. Click a city to plot it. Click empty space to restore EWR, CT, and AT.`;
   const leftovers = CITIES.filter((city) => !RESERVED.has(city)).sort();
@@ -366,10 +375,12 @@ function renderFeed() {
   const hourlyCumMax = Math.max(...finalHourly.cumulative, 1) * 1.08;
   const hourlyLayout = {
     ...baseLayout,
+    width: chartBox("hourly-chart"),
     barmode: "overlay",
     yaxis: { ...axis, title: "Hourly packages", rangemode: "tozero", range: [0, hourlyBarMax] },
     yaxis2: { ...axis, title: "Cumulative packages", overlaying: "y", side: "right", rangemode: "tozero", range: [0, hourlyCumMax] },
-    xaxis: { ...axis, title: "ET hour", range: [-0.5, hourlyLabels.length - 0.5], tickangle: -40, tickmode: hourly ? "auto" : "array", tickvals: hourly ? undefined : [] },
+    margin: { ...baseLayout.margin, r: 72, b: 108 },
+    xaxis: { ...axis, title: "ET hour", range: [-0.5, hourlyLabels.length - 0.5], tickangle: -60, tickfont: { size: 10 }, automargin: true, tickmode: hourly ? "auto" : "array", tickvals: hourly ? undefined : [] },
   };
   const hourlyBlock = document.getElementById("hourly-block");
   hourlyBlock.classList.remove("hidden");
@@ -388,11 +399,12 @@ function renderFeed() {
   periodBlock.classList.remove("hidden");
   const stationLayout = {
     ...baseLayout,
+    width: chartBox("station-chart"),
     showlegend: false,
-    margin: { l: 58, r: 20, t: 28, b: 90 },
+    margin: { l: 58, r: 20, t: 28, b: 108 },
     barmode: "stack",
     yaxis: { ...axis, title: "Packages", rangemode: "tozero", range: [0, dayStationMax()] },
-    xaxis: { ...axis, tickangle: -25 },
+    xaxis: { ...axis, tickangle: -35, tickfont: { size: 11 }, automargin: true },
   };
   if (!view.periods.length) {
     document.getElementById("station-legend").innerHTML = `<span><i style="background:${COLORS[0]}"></i>All Day</span>`;
@@ -521,6 +533,8 @@ if (recordMode) {
     clearInterval(timer);
     pinned = null;
     frame = Math.max(0, Math.min(TIMES.length - 1, index));
+    document.getElementById("city-page").classList.remove("hidden");
+    document.getElementById("feed-page").classList.remove("hidden");
     renderCity();
     renderFeed();
     const through = frame + 1;
