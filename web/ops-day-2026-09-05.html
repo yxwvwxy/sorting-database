@@ -311,22 +311,6 @@ function section(title, html) {
   return `<div><p class="module-title">${title}</p><div class="grid">${html}</div></div>`;
 }
 
-function plottedMax(cities) {
-  let max = 0;
-  for (let at = 0; at < TIMES.length; at += 1) {
-    for (const city of cities) max = Math.max(max, read(TOTALS, at, city));
-  }
-  return Math.max(max * 1.08, 1);
-}
-function dayStationMax() {
-  const periods = feedPeriods(TIMES.length - 1);
-  let max = 0;
-  STATION_NAMES.forEach((_, index) => {
-    max = Math.max(max, periods.reduce((sum, period) => sum + (period.deltas[index] || 0), 0));
-  });
-  return Math.max(max * 1.08, 1);
-}
-
 function chartBox(id) {
   const width = document.getElementById(id).clientWidth;
   return width > 0 ? width : undefined;
@@ -346,7 +330,7 @@ function renderCity() {
     ...baseLayout,
     width: chartBox("city-chart"),
     margin: { ...baseLayout.margin, b: 78 },
-    yaxis: { ...axis, title: "Packages", rangemode: "tozero", range: [0, plottedMax(chartCities)] },
+    yaxis: { ...axis, title: "Packages", rangemode: "tozero" },
     xaxis: { ...axis, title: "ET scrape time", tickangle: -90, tickfont: { size: 10 }, automargin: true, range: [-0.5, Math.max(categories.length - 0.5, 0.5)] },
   }, plotOpts);
   document.getElementById("city-caption").textContent = `Showing ${chartCities.join(", ")}. Y-axis is cumulative packages. X-axis is ET scrape time, drawn through the current frame. Click a city to plot it. Click empty space to restore EWR, CT, and AT.`;
@@ -369,18 +353,14 @@ function renderCity() {
 
 function renderFeed() {
   const hourly = hourlyStats(frame);
-  const finalHourly = hourlyStats(TIMES.length - 1);
-  const hourlyLabels = finalHourly.labels;
-  const hourlyBarMax = Math.max(...finalHourly.volumes, 1) * 1.08;
-  const hourlyCumMax = Math.max(...finalHourly.cumulative, 1) * 1.08;
   const hourlyLayout = {
     ...baseLayout,
     width: chartBox("hourly-chart"),
     barmode: "overlay",
-    yaxis: { ...axis, title: "Hourly packages", rangemode: "tozero", range: [0, hourlyBarMax] },
-    yaxis2: { ...axis, title: "Cumulative packages", overlaying: "y", side: "right", rangemode: "tozero", range: [0, hourlyCumMax] },
+    yaxis: { ...axis, title: "Hourly packages", rangemode: "tozero" },
+    yaxis2: { ...axis, title: "Cumulative packages", overlaying: "y", side: "right", rangemode: "tozero" },
     margin: { ...baseLayout.margin, r: 72, b: 108 },
-    xaxis: { ...axis, title: "ET hour", range: [-0.5, hourlyLabels.length - 0.5], tickangle: -60, tickfont: { size: 10 }, automargin: true, tickmode: hourly ? "auto" : "array", tickvals: hourly ? undefined : [] },
+    xaxis: { ...axis, title: "ET hour", tickangle: -60, tickfont: { size: 10 }, automargin: true },
   };
   const hourlyBlock = document.getElementById("hourly-block");
   hourlyBlock.classList.remove("hidden");
@@ -403,7 +383,7 @@ function renderFeed() {
     showlegend: false,
     margin: { l: 58, r: 20, t: 28, b: 108 },
     barmode: "stack",
-    yaxis: { ...axis, title: "Packages", rangemode: "tozero", range: [0, dayStationMax()] },
+    yaxis: { ...axis, title: "Packages", rangemode: "tozero" },
     xaxis: { ...axis, tickangle: -35, tickfont: { size: 11 }, automargin: true },
   };
   if (!view.periods.length) {
