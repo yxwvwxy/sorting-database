@@ -45,6 +45,7 @@
       font-weight: 600;
     }
     button.primary { background: var(--amber); border-color: var(--amber); color: #1a1200; }
+    a.text-link { color: var(--amber); font-weight: 600; }
     .meta { display: flex; flex-wrap: wrap; gap: 0.8rem 1.2rem; font-family: "IBM Plex Mono", monospace; font-size: 0.82rem; color: #b7c4bc; }
     .meta strong { color: var(--amber); font-weight: 500; }
     .bar { height: 4px; background: rgba(255,255,255,0.08); border-radius: 2px; margin: 0.8rem 0 1.2rem; }
@@ -92,6 +93,9 @@
     .hour-axis { border: 1px solid var(--line); background: rgba(0,0,0,0.18); padding: 0.55rem; display: flex; flex-direction: column; gap: 0.35rem; max-height: 460px; overflow: auto; }
     .hour-axis button { width: 100%; text-align: left; font-weight: 500; font-size: 0.82rem; }
     .hidden { display: none; }
+    body.record .toolbar { display: none; }
+    body.record #app { width: min(1880px, calc(100% - 1.2rem)); }
+    body.record .record-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0.8rem; align-items: start; }
     @media (max-width: 800px) { .feed-wrap { grid-template-columns: 1fr; } }
   </style>
 </head>
@@ -104,6 +108,7 @@
       <button id="pause" type="button">Pause</button>
       <button id="tab-city" type="button">City / hub</button>
       <button id="tab-feed" type="button">Feed &amp; hourly</button>
+      <a class="text-link" href="ops-day-2026-09-05-playback.html">Playback video</a>
     </div>
     <div class="meta" id="meta"></div>
     <div class="bar"><div id="progress"></div></div>
@@ -468,6 +473,34 @@ document.getElementById("app").addEventListener("click", (event) => {
 });
 
 render();
+
+const recordMode = new URLSearchParams(location.search).get("record");
+if (recordMode) {
+  document.body.classList.add("record");
+  const split = document.createElement("div");
+  split.className = "record-split";
+  const cityPage = document.getElementById("city-page");
+  const feedPage = document.getElementById("feed-page");
+  cityPage.parentNode.insertBefore(split, cityPage);
+  split.append(cityPage, feedPage);
+  window.recordFrame = (index) => {
+    playing = false;
+    clearInterval(timer);
+    pinned = null;
+    frame = Math.max(0, Math.min(TIMES.length - 1, index));
+    renderCity();
+    renderFeed();
+    const through = frame + 1;
+    const dest = CITIES.reduce((sum, city) => sum + read(TOTALS, frame, city), 0);
+    const hourly = hourlyStats(frame);
+    document.getElementById("city-page").classList.remove("hidden");
+    document.getElementById("feed-page").classList.remove("hidden");
+    document.getElementById("meta").innerHTML =
+      `<span>Eastern time <strong>${TIMES[frame]}</strong></span><span>2×</span><span>Scrapes <strong>${through} / ${TIMES.length}</strong></span><span>Destination total <strong>${fmt(dest)}</strong> pcs</span><span>Hourly <strong>${fmt(hourly ? hourly.total : 0)}</strong> pcs</span>`;
+    document.getElementById("progress").style.width = `${(through / TIMES.length) * 100}%`;
+  };
+  window.recordFrame(recordMode === "cover" ? TIMES.length - 1 : 0);
+}
   </script>
 </body>
 </html>
