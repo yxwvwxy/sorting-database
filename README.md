@@ -2,7 +2,7 @@
 
 **1 day example:** [2026-09-05 ops day](https://yxwvwxy.github.io/sorting-database/ops-day-2026-09-05.html)
 
-https://github.com/user-attachments/assets/d974224f-43b5-4ddb-a3f3-aabcb9ffbe2b
+https://github.com/user-attachments/assets/0f8f0d53-f6b8-40de-a805-f3799f3a4441
 
 Local / Windows UniMap scraper for NJ sorting data → Supabase, plus the public city dashboard.
 

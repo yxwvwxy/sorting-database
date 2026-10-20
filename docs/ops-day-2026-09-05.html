@@ -77,6 +77,31 @@
     .modules { display: grid; gap: 1.15rem; margin-top: 1rem; }
     .module-title { margin: 0 0 0.55rem; font-size: 0.85rem; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; }
     .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 0.65rem; }
+    .deck-block { margin-bottom: 1rem; }
+    .deck-label {
+      margin: 0 0 0.55rem;
+      font-size: 0.85rem;
+      color: var(--muted);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .station-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 0.65rem;
+    }
+    .station-card {
+      border: 1px solid var(--line);
+      background: rgba(0,0,0,0.22);
+      padding: 0.85rem 0.9rem;
+    }
+    .station-card .name { font-size: 0.82rem; color: #d7e0d9; margin-bottom: 0.35rem; }
+    .station-card .pcs { font-size: 1.35rem; font-weight: 700; letter-spacing: -0.01em; }
+    .station-card .pcs span { font-size: 0.85rem; font-weight: 500; color: var(--muted); margin-left: 0.25rem; }
+    .station-card .pct { margin-top: 0.25rem; font-family: "IBM Plex Mono", monospace; font-size: 0.85rem; color: var(--mint); }
+    @media (max-width: 900px) {
+      .station-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
     .tile {
       border: 1px solid var(--line);
       background: rgba(255,255,255,0.03);
@@ -95,8 +120,9 @@
     .hidden { display: none; }
     body.record .toolbar { display: none; }
     body.record #app { width: calc(100% - 1.2rem); max-width: none; }
-    body.record #city-chart, body.record #hourly-chart { height: 520px; }
-    body.record #station-chart { height: 560px; }
+    body.record #city-chart { height: 520px; }
+    body.record #hourly-chart { height: 400px; }
+    body.record #station-chart { height: 440px; }
     body.record .record-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0.8rem; align-items: start; }
     @media (max-width: 800px) { .feed-wrap { grid-template-columns: 1fr; } }
   </style>
@@ -128,9 +154,15 @@
         <p class="caption">Bars are packages sorted in each clock hour. The line is cumulative packages through that hour. A closed hour keeps the first capture after it closed. The open hour uses this frame. Y-axis is packages. X-axis is ET hour.</p>
         <div class="panel"><div id="hourly-chart"></div></div>
       </div>
-      <h2>Station cumulative volume</h2>
-      <p class="caption">Each percent is that station's current cumulative volume divided by the sum of all 10 stations. It is a share of the total, not growth since the previous hour.</p>
-      <div class="grid" id="stations"></div>
+      <p class="caption">Each percentage is that station's current cumulative volume as a share of all 10 stations, not the change from the previous hour.</p>
+      <div class="deck-block">
+        <p class="deck-label">Upper deck</p>
+        <div id="upper-cards" class="station-grid"></div>
+      </div>
+      <div class="deck-block">
+        <p class="deck-label">Lower deck</p>
+        <div id="lower-cards" class="station-grid"></div>
+      </div>
       <div id="period-block" style="margin-top:1.2rem">
         <h2>Station volume by period</h2>
         <p class="caption" id="period-caption"></p>
@@ -138,7 +170,7 @@
           <div>
             <div class="panel"><div id="station-legend" class="feed-legend"></div><div id="station-chart"></div></div>
             <p class="caption" id="totals-caption"></p>
-            <div class="grid" id="period-totals"></div>
+            <div id="period-totals" class="station-grid"></div>
           </div>
           <div class="hour-axis" id="periods"></div>
         </div>
@@ -344,9 +376,9 @@ function renderCity() {
     chartCities.includes(code),
   );
   document.getElementById("tiles").innerHTML = [
-    section("7pm transfer", BLOCK_7PM.map(plain).join("")),
-    section("9pm transfer", [...BLOCK_9PM, ...leftovers].map(plain).join("")),
-    section("Region", [region("ATL", ATL_PARTS), plain("MIA"), plain("ORD"), region("DFW", DFW_PARTS), region("LAX", LAX_PARTS)].join("")),
+    section("7pm outbound", BLOCK_7PM.map(plain).join("")),
+    section("9pm outbound", [...BLOCK_9PM, ...leftovers].map(plain).join("")),
+    section("Hubs", [region("ATL", ATL_PARTS), plain("MIA"), plain("ORD"), region("DFW", DFW_PARTS), region("LAX", LAX_PARTS)].join("")),
     section("EWR / JFK", ["EWR", "JFK"].map(plain).join("")),
   ].join("");
 }
@@ -369,11 +401,13 @@ function renderFeed() {
     { type: "scatter", mode: "lines+markers", name: "Cumulative volume", x: hourly ? hourly.labels : [], y: hourly ? hourly.cumulative : [], yaxis: "y2", line: { color: "#3ddc97", width: 2 } },
   ], hourlyLayout, plotOpts);
   const deckTotal = STATION_VOLUMES[frame].reduce((sum, value) => sum + value, 0);
-  document.getElementById("stations").innerHTML = STATION_NAMES.map((name, index) => {
+  const stationCards = STATION_NAMES.map((name, index) => {
     const volume = STATION_VOLUMES[frame][index] || 0;
     const pct = deckTotal ? ((volume / deckTotal) * 100).toFixed(1) : "0.0";
-    return `<div class="tile"><div class="code">${name}</div><div class="vol">${fmt(volume)}</div><div class="pct">${pct}%</div></div>`;
-  }).join("");
+    return `<div class="station-card"><div class="name">${name}</div><div class="pcs">${fmt(volume)}<span>pcs</span></div><div class="pct">${pct}%</div></div>`;
+  });
+  document.getElementById("upper-cards").innerHTML = stationCards.slice(0, 5).join("");
+  document.getElementById("lower-cards").innerHTML = stationCards.slice(5).join("");
   const view = viewState();
   const periodBlock = document.getElementById("period-block");
   periodBlock.classList.remove("hidden");
@@ -398,7 +432,7 @@ function renderFeed() {
     }], stationLayout, plotOpts);
     document.getElementById("totals-caption").textContent = "All-day station totals (pcs)";
     document.getElementById("period-totals").innerHTML = STATION_NAMES.map((name) =>
-      `<div class="tile"><div class="code">${name}</div><div class="vol">${fmt(0)}</div></div>`
+      `<div class="station-card"><div class="name">${name}</div><div class="pcs">${fmt(0)}<span>pcs</span></div></div>`
     ).join("");
     document.getElementById("periods").innerHTML = `<div class="caption" style="text-align:center">Period (ET)</div><button type="button" class="primary" data-period="all">All Day</button>`;
     return;
@@ -421,7 +455,7 @@ function renderFeed() {
     ? `${view.hourPeriod.label} station totals (pcs)`
     : "All-day station totals (pcs)";
   document.getElementById("period-totals").innerHTML = STATION_NAMES.map((name, index) =>
-    `<div class="tile"><div class="code">${name}</div><div class="vol">${fmt(totals[index])}</div></div>`
+    `<div class="station-card"><div class="name">${name}</div><div class="pcs">${fmt(totals[index])}<span>pcs</span></div></div>`
   ).join("");
   const buttons = [`<button type="button" class="${view.showAllDay ? "primary" : ""}" data-period="all">All Day</button>`]
     .concat(view.periods.map((period) => `<button type="button" class="${view.hourPeriod && view.hourPeriod.key === period.key ? "primary" : ""}" data-period="${period.key}">${period.label}</button>`));
