@@ -120,9 +120,8 @@
     .hidden { display: none; }
     body.record .toolbar { display: none; }
     body.record #app { width: calc(100% - 1.2rem); max-width: none; }
-    body.record #city-chart { height: 520px; }
-    body.record #hourly-chart { height: 400px; }
-    body.record #station-chart { height: 440px; }
+    body.record #city-chart, body.record #hourly-chart { height: 520px; }
+    body.record #station-chart { height: 560px; }
     body.record .record-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0.8rem; align-items: start; }
     @media (max-width: 800px) { .feed-wrap { grid-template-columns: 1fr; } }
   </style>
@@ -170,7 +169,7 @@
           <div>
             <div class="panel"><div id="station-legend" class="feed-legend"></div><div id="station-chart"></div></div>
             <p class="caption" id="totals-caption"></p>
-            <div id="period-totals" class="station-grid"></div>
+            <div class="grid" id="period-totals"></div>
           </div>
           <div class="hour-axis" id="periods"></div>
         </div>
@@ -376,9 +375,9 @@ function renderCity() {
     chartCities.includes(code),
   );
   document.getElementById("tiles").innerHTML = [
-    section("7pm outbound", BLOCK_7PM.map(plain).join("")),
-    section("9pm outbound", [...BLOCK_9PM, ...leftovers].map(plain).join("")),
-    section("Hubs", [region("ATL", ATL_PARTS), plain("MIA"), plain("ORD"), region("DFW", DFW_PARTS), region("LAX", LAX_PARTS)].join("")),
+    section("7pm transfer", BLOCK_7PM.map(plain).join("")),
+    section("9pm transfer", [...BLOCK_9PM, ...leftovers].map(plain).join("")),
+    section("Region", [region("ATL", ATL_PARTS), plain("MIA"), plain("ORD"), region("DFW", DFW_PARTS), region("LAX", LAX_PARTS)].join("")),
     section("EWR / JFK", ["EWR", "JFK"].map(plain).join("")),
   ].join("");
 }
@@ -432,7 +431,7 @@ function renderFeed() {
     }], stationLayout, plotOpts);
     document.getElementById("totals-caption").textContent = "All-day station totals (pcs)";
     document.getElementById("period-totals").innerHTML = STATION_NAMES.map((name) =>
-      `<div class="station-card"><div class="name">${name}</div><div class="pcs">${fmt(0)}<span>pcs</span></div></div>`
+      `<div class="tile"><div class="code">${name}</div><div class="vol">${fmt(0)}</div></div>`
     ).join("");
     document.getElementById("periods").innerHTML = `<div class="caption" style="text-align:center">Period (ET)</div><button type="button" class="primary" data-period="all">All Day</button>`;
     return;
@@ -455,7 +454,7 @@ function renderFeed() {
     ? `${view.hourPeriod.label} station totals (pcs)`
     : "All-day station totals (pcs)";
   document.getElementById("period-totals").innerHTML = STATION_NAMES.map((name, index) =>
-    `<div class="station-card"><div class="name">${name}</div><div class="pcs">${fmt(totals[index])}<span>pcs</span></div></div>`
+    `<div class="tile"><div class="code">${name}</div><div class="vol">${fmt(totals[index])}</div></div>`
   ).join("");
   const buttons = [`<button type="button" class="${view.showAllDay ? "primary" : ""}" data-period="all">All Day</button>`]
     .concat(view.periods.map((period) => `<button type="button" class="${view.hourPeriod && view.hourPeriod.key === period.key ? "primary" : ""}" data-period="${period.key}">${period.label}</button>`));
