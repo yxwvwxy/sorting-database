@@ -125,15 +125,52 @@
       grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
       gap: 0.65rem;
     }
-    .tile.wide { grid-column: span 2; }
-    .tile.wide .breakdown { white-space: nowrap; }
     .tile {
+      position: relative;
       border: 1px solid var(--line);
       background: linear-gradient(160deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015));
       padding: 0.7rem 0.8rem;
       transition: border-color 160ms ease, transform 160ms ease;
       cursor: pointer;
     }
+    .tile-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 0.35rem;
+    }
+    .tile-menu { position: relative; flex: 0 0 auto; }
+    .tile-menu summary {
+      list-style: none;
+      cursor: pointer;
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 0.66rem;
+      letter-spacing: 0.03em;
+      color: var(--amber);
+    }
+    .tile-menu summary::-webkit-details-marker { display: none; }
+    .tile-menu-panel {
+      position: absolute;
+      right: 0;
+      top: calc(100% + 0.25rem);
+      z-index: 6;
+      min-width: 220px;
+      padding: 0.45rem 0.55rem;
+      border: 1px solid var(--line);
+      background: #17211c;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 0.68rem;
+      line-height: 1.45;
+      color: #c5d0c8;
+    }
+    .tile-menu-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 0.8rem;
+      white-space: nowrap;
+    }
+    .tile-menu-row .bundle-bit { color: var(--mint); }
     .tile:hover {
       border-color: rgba(240,162,2,0.45);
       transform: translateY(-1px);
@@ -154,20 +191,17 @@
       font-size: 1.3rem;
       font-weight: 700;
     }
+    .tile .bundles {
+      margin-top: 0.12rem;
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 0.72rem;
+      color: var(--mint);
+    }
     .tile .delta {
       margin-top: 0.15rem;
       font-family: "IBM Plex Mono", monospace;
       font-size: 0.72rem;
       color: var(--muted);
-    }
-    .tile .breakdown {
-      margin-top: 0.4rem;
-      padding-top: 0.35rem;
-      border-top: 1px solid var(--line);
-      font-family: "IBM Plex Mono", monospace;
-      font-size: 0.68rem;
-      color: #c5d0c8;
-      line-height: 1.45;
     }
     .city-modules { display: grid; gap: 1.15rem; }
     .city-module-title {
@@ -486,7 +520,7 @@
       <div id="gofo-meta" class="meta"></div>
       <p id="gofo-error" class="error hidden"></p>
       <h2>Latest city totals</h2>
-      <p class="caption">JFK175 volume is under JFK/PWM (7pm outbound). The JFK tile lists each city, and lists a chute with more than one city on its own line. PWM is its own tile.</p>
+      <p class="caption">JFK175 volume is under JFK/PWM (7pm outbound). Open Details on the JFK tile for each city and for a chute that holds more than one city. PWM is its own tile.</p>
       <div id="gofo-tiles" class="city-modules"></div>
       <h2 style="margin-top:1.35rem">Growth chart</h2>
       <p id="gofo-chart-caption" class="caption">Showing JFK, PWM</p>
@@ -1005,34 +1039,66 @@
     function sumCityParts(map, parts) {
       let total = 0;
       let delta = 0;
+      let chutes = 0;
+      let hasChutes = false;
       const breakdown = parts.map((code) => {
         const r = map.get(code);
         const total_volume = r ? Number(r.total_volume || 0) : 0;
         const delta_volume = r ? Number(r.delta_volume || 0) : 0;
+        const chute_count = r && r.chute_count != null ? Number(r.chute_count) : null;
         total += total_volume;
         delta += delta_volume;
-        return { city: code, total_volume, delta_volume };
+        if (chute_count != null) {
+          hasChutes = true;
+          chutes += chute_count;
+        }
+        return { city: code, total_volume, delta_volume, chute_count };
       });
-      return { total_volume: total, delta_volume: delta, breakdown };
+      return {
+        total_volume: total,
+        delta_volume: delta,
+        chute_count: hasChutes ? chutes : null,
+        breakdown,
+      };
     }
 
-    function tileHtml(code, totalVolume, deltaVolume, breakdown, selection = cityChartSelection, dataKey = code, extraLines = []) {
+    function detailMenu(lines) {
+      if (!lines.length) return "";
+      const body = lines.map((line) => {
+        const count = line.chute_count == null
+          ? ""
+          : `<span class="bundle-bit">Bundle count: ${fmt(line.chute_count)}</span>`;
+        return `<div class="tile-menu-row"><span>${line.label} ${fmt(line.volume)}</span>${count}</div>`;
+      }).join("");
+      return `<details class="tile-menu">
+          <summary>Details</summary>
+          <div class="tile-menu-panel">${body}</div>
+        </details>`;
+    }
+
+    function tileHtml(code, totalVolume, deltaVolume, breakdown, selection = cityChartSelection, dataKey = code, extraLines = [], bundleCount = null) {
       const d = Number(deltaVolume || 0);
       const delta = d >= 0 ? `+${fmt(d)}` : fmt(d);
       const selected = selection.includes(dataKey) ? " selected" : "";
       const lines = [
-        ...(breakdown || []).map((b) => `${b.city} ${fmt(b.total_volume)}`),
+        ...(breakdown || []).map((b) => ({
+          label: b.city,
+          volume: b.total_volume,
+          chute_count: b.chute_count,
+        })),
         ...extraLines,
       ];
-      const detail = lines.length
-        ? `<div class="breakdown">${lines.join("<br>")}</div>`
-        : "";
-      const wide = extraLines.length ? " wide" : "";
-      return `<div class="tile${selected}${wide}" data-city="${dataKey}" role="button" tabindex="0" title="Show ${code} growth">
-          <div class="code">${code}</div>
+      const bundles = bundleCount == null
+        ? ""
+        : `<div class="bundles">Bundle count: ${fmt(bundleCount)}</div>`;
+      return `<div class="tile${selected}" data-city="${dataKey}" role="button" tabindex="0" title="Show ${code} growth">
+          <div class="tile-top">
+            <div class="code">${code}</div>
+            ${detailMenu(lines)}
+          </div>
           <div class="vol">${fmt(totalVolume)}</div>
+          ${bundles}
           <div class="delta">last Δ ${delta}</div>
-          ${detail}
         </div>`;
     }
 
@@ -1680,6 +1746,14 @@
       return tileSum + mixedSum;
     }
 
+    function warehouseBundleCount(latestRows, mixed, sections, warehouse) {
+      const tileCount = latestRows
+        .filter((r) => sections.includes(r.section))
+        .reduce((sum, r) => sum + Number(r.chute_count || 0), 0);
+      const mixedCount = mixed.filter((r) => r.warehouse === warehouse).length;
+      return tileCount + mixedCount;
+    }
+
     function renderGofoTiles(latestRows, mixedRows) {
       const mixed = mixedRows || [];
       const jfkMixed = mixed.filter((r) => r.warehouse === "JFK175");
@@ -1692,16 +1766,30 @@
           .filter((r) => r.section === key)
           .sort((a, b) => a.code.localeCompare(b.code));
         if (!rows.length && !(key === "jfk_pwm" && jfkMixed.length)) return "";
-        if (key === "bwi") title = `BWI.H (8am-7pm outbound) - ${fmt(bwiTotal)}`;
+        if (key === "bwi") {
+          const bwiBundles = warehouseBundleCount(latestRows, mixed, ["bwi"], "BWI.H");
+          title = `BWI.H (8am-7pm outbound) - ${fmt(bwiTotal)} Bundle count: ${fmt(bwiBundles)}`;
+        }
         const titleClass = key === "bwi" || key === "jfk_pwm" ? "city-module-title plain" : "city-module-title";
+        const ewrBundles = warehouseBundleCount(latestRows, mixed, ["ewr_one", "ewr_multi"], "EWR.H");
         const ewrLine = key === "ewr_one"
-          ? `<p class="city-module-title plain">EWR.H (9am-11pm outbound) - ${fmt(ewrTotal)}</p>`
+          ? `<p class="city-module-title plain">EWR.H (9am-11pm outbound) - ${fmt(ewrTotal)} Bundle count: ${fmt(ewrBundles)}</p>`
           : "";
         const body = rows.map((r) => {
+          const bundleCount = r.chute_count == null ? null : Number(r.chute_count);
           if (r.section === "uni_hub" && GOFO_ROLLUP[r.code]) {
             const partMap = new Map(gofoUniPartLatest.map((part) => [part.code, part]));
             const summed = sumCityParts(partMap, GOFO_ROLLUP[r.code]);
-            return tileHtml(r.code, summed.total_volume, summed.delta_volume, summed.breakdown, gofoChartSelection, r.city);
+            return tileHtml(
+              r.code,
+              summed.total_volume,
+              summed.delta_volume,
+              summed.breakdown,
+              gofoChartSelection,
+              r.city,
+              [],
+              summed.chute_count
+            );
           }
           if (r.section === "jfk_pwm" && r.code === "JFK" && (gofoJfkPartLatest.length || jfkMixed.length)) {
             const partMap = new Map(gofoJfkPartLatest.map((part) => [part.code, part]));
@@ -1709,9 +1797,14 @@
             const summed = sumCityParts(partMap, parts);
             const chuteLines = jfkMixed.map((chute) => {
               const cities = String(chute.cities || "").replace(/,/g, "");
-              return `Chute ${chute.chute_id} (${cities}) - ${fmt(chute.volume)}`;
+              return {
+                label: `Chute ${chute.chute_id} (${cities})`,
+                volume: Number(chute.volume || 0),
+                chute_count: 1,
+              };
             });
             const chuteVolume = jfkMixed.reduce((sum, chute) => sum + Number(chute.volume || 0), 0);
+            const jfkBundles = (summed.chute_count || 0) + jfkMixed.length;
             return tileHtml(
               r.code,
               summed.total_volume + chuteVolume,
@@ -1719,10 +1812,11 @@
               summed.breakdown,
               gofoChartSelection,
               r.city,
-              chuteLines
+              chuteLines,
+              jfkBundles
             );
           }
-          return tileHtml(r.code, r.total_volume, r.delta_volume, null, gofoChartSelection, r.city);
+          return tileHtml(r.code, r.total_volume, r.delta_volume, null, gofoChartSelection, r.city, [], bundleCount);
         }).join("");
         return `<div class="city-module">${ewrLine}<p class="${titleClass}">${title}</p><div class="grid">${body}</div></div>`;
       }).join("");
@@ -1864,12 +1958,14 @@
       setActiveTab(btn.dataset.tab);
     });
     $("tiles").addEventListener("click", (event) => {
+      if (event.target.closest("details.tile-menu")) return;
       const tile = event.target.closest(".tile[data-city]");
       if (!tile || !$("city-section").contains(tile)) return;
       onCityTileActivate(tile.dataset.city);
     });
     $("tiles").addEventListener("keydown", (event) => {
       if (event.key !== "Enter" && event.key !== " ") return;
+      if (event.target.closest("details.tile-menu")) return;
       const tile = event.target.closest(".tile[data-city]");
       if (!tile) return;
       event.preventDefault();
@@ -1880,12 +1976,14 @@
       loadGofoBatches().then(loadGofoSeries).catch((e) => showError("gofo-error", e));
     });
     $("gofo-tiles").addEventListener("click", (event) => {
+      if (event.target.closest("details.tile-menu")) return;
       const tile = event.target.closest(".tile[data-city]");
       if (!tile) return;
       onGofoTileActivate(tile.dataset.city);
     });
     $("gofo-tiles").addEventListener("keydown", (event) => {
       if (event.key !== "Enter" && event.key !== " ") return;
+      if (event.target.closest("details.tile-menu")) return;
       const tile = event.target.closest(".tile[data-city]");
       if (!tile) return;
       event.preventDefault();
