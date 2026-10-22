@@ -2112,25 +2112,35 @@
     function renderBundle(batch, rows) {
       const uniRows = rows.filter((r) => r.row_kind === "count" && r.group_name === "uni_hub");
       const rolled = new Set(Object.values(BUNDLE_ROLLUPS).flat());
-      const tiles = [
-        { code: "ATL", total: bundleCount(rows, "uni_hub", "ATL"), parts: [] },
-        { code: "BWI.H", total: bundleCount(rows, "bwi", "BWI.H"), parts: [] },
-        { code: "DFW", total: BUNDLE_ROLLUPS.DFW.reduce((sum, place) => sum + bundleCount(rows, "uni_hub", place), 0), parts: BUNDLE_ROLLUPS.DFW.map((place) => ({ label: place, count: bundleCount(rows, "uni_hub", place) })) },
-        { code: "EWR.H", total: bundleCount(rows, "ewr", "EWR.H"), parts: [
-          { label: "one route", count: bundleCount(rows, "ewr_one", "EWR.H") },
-          { label: "multiple routes", count: bundleCount(rows, "ewr_multi", "EWR.H") },
-        ] },
-        { code: "JFK", total: bundleCount(rows, "jfk", "JFK"), parts: [] },
-        { code: "LAX", total: BUNDLE_ROLLUPS.LAX.reduce((sum, place) => sum + bundleCount(rows, "uni_hub", place), 0), parts: BUNDLE_ROLLUPS.LAX.map((place) => ({ label: place, count: bundleCount(rows, "uni_hub", place) })) },
-        { code: "MIA", total: bundleCount(rows, "uni_hub", "MIA"), parts: [] },
-        { code: "ORD", total: bundleCount(rows, "uni_hub", "ORD"), parts: [] },
-        { code: "PWM", total: bundleCount(rows, "pwm", "PWM"), parts: [] },
-        ...uniRows
-          .map((r) => r.place)
-          .filter((place) => place && !rolled.has(place) && !["ATL", "MIA", "ORD"].includes(place))
-          .map((place) => ({ code: place, total: bundleCount(rows, "uni_hub", place), parts: [] })),
-      ].sort((a, b) => a.code.localeCompare(b.code));
-      const regionTiles = tiles.map((tile) => countTile(tile.code, tile.total, tile.parts)).join("");
+      const hubParts = (places) => places.map((place) => ({ label: place, count: bundleCount(rows, "uni_hub", place) }));
+      const groups = [
+        [
+          { code: "EWR.H", total: bundleCount(rows, "ewr", "EWR.H"), parts: [
+            { label: "one route", count: bundleCount(rows, "ewr_one", "EWR.H") },
+            { label: "multiple routes", count: bundleCount(rows, "ewr_multi", "EWR.H") },
+          ] },
+          { code: "BWI.H", total: bundleCount(rows, "bwi", "BWI.H"), parts: [] },
+        ],
+        [
+          { code: "ATL", total: bundleCount(rows, "uni_hub", "ATL"), parts: [] },
+          { code: "DFW", total: BUNDLE_ROLLUPS.DFW.reduce((sum, place) => sum + bundleCount(rows, "uni_hub", place), 0), parts: hubParts(BUNDLE_ROLLUPS.DFW) },
+          { code: "LAX", total: BUNDLE_ROLLUPS.LAX.reduce((sum, place) => sum + bundleCount(rows, "uni_hub", place), 0), parts: hubParts(BUNDLE_ROLLUPS.LAX) },
+          { code: "MIA", total: bundleCount(rows, "uni_hub", "MIA"), parts: [] },
+          { code: "ORD", total: bundleCount(rows, "uni_hub", "ORD"), parts: [] },
+          ...uniRows
+            .map((r) => r.place)
+            .filter((place) => place && !rolled.has(place) && !["ATL", "MIA", "ORD"].includes(place))
+            .sort((a, b) => a.localeCompare(b))
+            .map((place) => ({ code: place, total: bundleCount(rows, "uni_hub", place), parts: [] })),
+        ],
+        [
+          { code: "JFK", total: bundleCount(rows, "jfk", "JFK"), parts: [] },
+          { code: "PWM", total: bundleCount(rows, "pwm", "PWM"), parts: [] },
+        ],
+      ];
+      const regionTiles = groups
+        .map((tiles) => `<div class="count-grid">${tiles.map((tile) => countTile(tile.code, tile.total, tile.parts)).join("")}</div>`)
+        .join("");
       const total = ["uni_hub", "jfk", "pwm", "ewr", "bwi"].reduce((sum, group) => {
         return sum + rows
           .filter((r) => r.row_kind === "count" && r.group_name === group)
@@ -2143,7 +2153,7 @@
       `;
       const outliers = rows.filter((r) => r.row_kind === "outlier");
       $("bundle-body").innerHTML = `
-        <div class="count-grid">${regionTiles}</div>
+        ${regionTiles}
         <h2>EWR.H · one route</h2>
         ${shipmentBlocks(outliers.filter((r) => r.group_name === "ewr_one"))}
         <h2>Other</h2>
