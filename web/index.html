@@ -1825,6 +1825,7 @@
     const gofoBundleByKey = new Map();
     const gofoBundleByCity = new Map();
     const gofoBundleByWarehouse = new Map();
+    const BUNDLE_CITY_ALIAS = { BAY: "SJC", SMF: "SJC" };
 
     function rememberBundleCounts(rows) {
       gofoBundleByKey.clear();
@@ -1833,7 +1834,7 @@
       for (const row of rows || []) {
         const count = Number(row.bundle_count || 0);
         const warehouse = String(row.warehouse || "");
-        const city = String(row.city || "");
+        const city = BUNDLE_CITY_ALIAS[String(row.city || "")] || String(row.city || "");
         if (warehouse) {
           gofoBundleByWarehouse.set(warehouse, (gofoBundleByWarehouse.get(warehouse) || 0) + count);
         }
@@ -1887,17 +1888,15 @@
           const bwiBundles = gofoBundleByWarehouse.get("BWI.H") || 0;
           title = `BWI.H (8am-7pm outbound) - ${fmt(bwiTotal)} Bundle count: ${fmt(bwiBundles)}`;
         }
-        if (key === "ewr_one" || key === "ewr_multi") {
-          const sectionBundles = bundleCountFor(key, rows.map((r) => r.code));
-          title = `${title} Bundle count: ${fmt(sectionBundles)}`;
-        }
         const titleClass = key === "bwi" || key === "jfk_pwm" ? "city-module-title plain" : "city-module-title";
         const ewrBundles = gofoBundleByWarehouse.get("EWR.H") || 0;
         const ewrLine = key === "ewr_one"
           ? `<p class="city-module-title plain">EWR.H (9am-11pm outbound) - ${fmt(ewrTotal)} Bundle count: ${fmt(ewrBundles)}</p>`
           : "";
         const body = rows.map((r) => {
-          const bundleCount = bundleCountFor(r.section, [r.code]);
+          const bundleCount = r.section === "bwi" || r.section === "ewr_one" || r.section === "ewr_multi"
+            ? null
+            : bundleCountFor(r.section, [r.code]);
           if (r.section === "uni_hub" && GOFO_ROLLUP[r.code]) {
             const partMap = new Map(gofoUniPartLatest.map((part) => [part.code, part]));
             const summed = sumCityParts(partMap, GOFO_ROLLUP[r.code]);
@@ -2115,10 +2114,7 @@
       const hubParts = (places) => places.map((place) => ({ label: place, count: bundleCount(rows, "uni_hub", place) }));
       const groups = [
         [
-          { code: "EWR.H", total: bundleCount(rows, "ewr", "EWR.H"), parts: [
-            { label: "one route", count: bundleCount(rows, "ewr_one", "EWR.H") },
-            { label: "multiple routes", count: bundleCount(rows, "ewr_multi", "EWR.H") },
-          ] },
+          { code: "EWR.H", total: bundleCount(rows, "ewr", "EWR.H"), parts: [] },
           { code: "BWI.H", total: bundleCount(rows, "bwi", "BWI.H"), parts: [] },
         ],
         [
