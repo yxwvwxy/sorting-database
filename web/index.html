@@ -630,7 +630,7 @@
       <div id="gofo-meta" class="meta"></div>
       <p id="gofo-error" class="error hidden"></p>
       <h2>Latest city totals</h2>
-      <p class="caption">JFK175 volume is under JFK/PWM (7pm outbound). Open Details on the JFK tile for each city and for a chute that holds more than one city. PWM is its own tile.</p>
+      <p class="caption">JFK175 volume is under JFK/PWM (7pm outbound). Open Details on the JFK tile for each city and for a chute that holds more than one city. PWM is its own tile. Bundle count is bundles created in this ops day through the latest scrape.</p>
       <div id="gofo-tiles" class="city-modules"></div>
       <h2 style="margin-top:1.35rem">Growth chart</h2>
       <p id="gofo-chart-caption" class="caption">Showing JFK, PWM</p>
@@ -640,9 +640,6 @@
     <section id="bundle-section" class="section hidden">
       <h2>Bundle</h2>
       <div class="controls">
-        <label>Batch / ops day
-          <select id="bundle-batch"></select>
-        </label>
         <label>&nbsp;
           <button id="bundle-reload" type="button">Refresh</button>
         </label>
@@ -763,7 +760,6 @@
     let batches = [];
     let feedBatches = [];
     let gofoBatches = [];
-    let bundleBatches = [];
     let feedLayers = []; // per-station hourly totals
     let feedHourTabs = []; // :30 hour buckets
     let feedLatest = [];
@@ -2184,7 +2180,7 @@
         .reduce((sum, r) => sum + Number(r.bundle_count || 0), 0);
     }
 
-    function renderBundle(batch, rows) {
+    function renderBundle(rows) {
       const counts = rows.filter((r) => r.row_kind === "count" && ["uni_hub", "jfk", "pwm", "ewr", "bwi"].includes(r.group_name));
       const visible = ["Created", "Shipped", "Arrived"];
       const foldOrder = ["Inbound", "Draft", "Cancelled"];
@@ -2209,13 +2205,12 @@
       const extraHead = folded.map((status) => `<th class="status-extra">${esc(status)}</th>`).join("");
       const total = counts.reduce((sum, r) => sum + Number(r.bundle_count || 0), 0);
       $("bundle-meta").innerHTML = `
-        <span>ops day <strong>${esc(batch.subbatch_date)}</strong></span>
-        <span>batch <strong>${esc(batch.subbatch)}</strong></span>
+        <span>last <strong>24 hours</strong></span>
         <span>bundles <strong>${fmt(total)}</strong></span>
       `;
       const outliers = rows.filter((r) => r.row_kind === "outlier");
       $("bundle-body").innerHTML = `
-        <p class="caption">Each bundle is counted at its latest status. The hourly export can move it to another status.</p>
+        <p class="caption">Bundles created in the last 24 hours. Each bundle is counted at its latest status.</p>
         <div class="status-board-row">
           <div class="bundle-table-wrap">
             <table class="bundle-table status-board">
@@ -2234,25 +2229,10 @@
       `;
     }
 
-    async function loadBundleBatches() {
-      const cutoff = etDaysAgoYmd(6);
-      const all = await rpc("list_gofo_batches", { p_limit: 100 });
-      bundleBatches = all.filter((b) =>
-        String(b.subbatch_date || "") >= cutoff &&
-        String(b.subbatch_date || "") >= GOFO_FIRST_OPS_DAY
-      );
-      $("bundle-batch").innerHTML = bundleBatches.map((b, i) => {
-        const label = `${b.subbatch_date} · ${b.subbatch} · ${b.scrape_count} snaps · ${fmt(b.latest_total)}`;
-        return `<option value="${i}">${label}</option>`;
-      }).join("");
-    }
-
     async function loadBundleBoard() {
       showError("bundle-error", null);
-      const batch = bundleBatches[Number($("bundle-batch").value)];
-      if (!batch || String(batch.subbatch_date || "") < GOFO_FIRST_OPS_DAY) return;
-      const rows = await rpc("bundle_board", { p_operation_date: batch.subbatch_date });
-      renderBundle(batch, rows);
+      const rows = await rpc("bundle_board", { p_operation_date: etDaysAgoYmd(0) });
+      renderBundle(rows || []);
     }
 
     async function bootApp() {
@@ -2261,7 +2241,7 @@
         tasks.push(loadGofoBatches().then(loadGofoSeries).catch((err) => showError("gofo-error", err)));
       }
       if (visibleTabs().includes("bundle")) {
-        tasks.push(loadBundleBatches().then(loadBundleBoard).catch((err) => showError("bundle-error", err)));
+        tasks.push(loadBundleBoard().catch((err) => showError("bundle-error", err)));
       }
       if (hasRole("city")) {
         tasks.push(loadBatchesInto("batch", "city").then(loadCitySeries).catch((err) => showError("error", err)));
@@ -2304,12 +2284,12 @@
     $("gofo-reload").addEventListener("click", () => {
       loadGofoBatches().then(loadGofoSeries).catch((e) => showError("gofo-error", e));
     });
-    $("bundle-batch").addEventListener("change", () => loadBundleBoard().catch((e) => showError("bundle-error", e)));
     $("bundle-reload").addEventListener("click", () => {
-      loadBundleBatches().then(loadBundleBoard).catch((e) => showError("bundle-error", e));
+      loadBundleBoard().catch((e) => showError("bundle-error", e));
     });
     setInterval(() => {
-      if (!bundleBatches.length) return;
+      if ($("app-tabs").classList.contains("hidden")) return;
+      if (!visibleTabs().includes("bundle")) return;
       loadBundleBoard().catch((e) => showError("bundle-error", e));
     }, 60 * 60 * 1000);
     document.addEventListener("toggle", (event) => {
@@ -2390,7 +2370,6 @@
         batches = [];
         feedBatches = [];
         gofoBatches = [];
-        bundleBatches = [];
         cityChartModel = { series: [], cities: [] };
         cityChartSelection = CITY_CHART_DEFAULT.slice();
         gofoChartModel = { series: [], cities: [] };
