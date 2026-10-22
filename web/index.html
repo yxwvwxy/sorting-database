@@ -139,7 +139,9 @@
       justify-content: space-between;
       gap: 0.35rem;
     }
+    .tile:has(details[open]) { z-index: 5; }
     .tile-menu { position: relative; flex: 0 0 auto; }
+    .tile-menu[open] { z-index: 6; }
     .tile-menu summary {
       list-style: none;
       cursor: pointer;
@@ -151,10 +153,11 @@
     .tile-menu summary::-webkit-details-marker { display: none; }
     .tile-menu-panel {
       position: absolute;
-      right: 0;
+      left: 0;
       top: calc(100% + 0.25rem);
-      z-index: 6;
-      min-width: 220px;
+      z-index: 7;
+      width: max-content;
+      max-width: calc(100vw - 24px);
       padding: 0.45rem 0.55rem;
       border: 1px solid var(--line);
       background: #17211c;
@@ -164,6 +167,7 @@
       line-height: 1.45;
       color: #c5d0c8;
     }
+    .tile-menu-panel.align-end { left: auto; right: 0; }
     .tile-menu-row {
       display: flex;
       justify-content: space-between;
@@ -1065,9 +1069,9 @@
     function detailMenu(lines) {
       if (!lines.length) return "";
       const body = lines.map((line) => {
-        const count = line.chute_count == null
+        const count = line.bundle_count == null
           ? ""
-          : `<span class="bundle-bit">Bundle count: ${fmt(line.chute_count)}</span>`;
+          : `<span class="bundle-bit">Bundle count: ${fmt(line.bundle_count)}</span>`;
         return `<div class="tile-menu-row"><span>${line.label} ${fmt(line.volume)}</span>${count}</div>`;
       }).join("");
       return `<details class="tile-menu">
@@ -1084,7 +1088,7 @@
         ...(breakdown || []).map((b) => ({
           label: b.city,
           volume: b.total_volume,
-          chute_count: b.chute_count,
+          bundle_count: b.bundle_count,
         })),
         ...extraLines,
       ];
@@ -1746,12 +1750,53 @@
       return tileSum + mixedSum;
     }
 
-    function warehouseBundleCount(latestRows, mixed, sections, warehouse) {
-      const tileCount = latestRows
-        .filter((r) => sections.includes(r.section))
-        .reduce((sum, r) => sum + Number(r.chute_count || 0), 0);
-      const mixedCount = mixed.filter((r) => r.warehouse === warehouse).length;
-      return tileCount + mixedCount;
+    const gofoBundleByKey = new Map();
+    const gofoBundleByCity = new Map();
+    const gofoBundleByWarehouse = new Map();
+
+    function rememberBundleCounts(rows) {
+      gofoBundleByKey.clear();
+      gofoBundleByCity.clear();
+      gofoBundleByWarehouse.clear();
+      for (const row of rows || []) {
+        const count = Number(row.bundle_count || 0);
+        const warehouse = String(row.warehouse || "");
+        const city = String(row.city || "");
+        if (warehouse) {
+          gofoBundleByWarehouse.set(warehouse, (gofoBundleByWarehouse.get(warehouse) || 0) + count);
+        }
+        if (!city) continue;
+        if (warehouse) {
+          const key = `${warehouse}|${city}`;
+          gofoBundleByKey.set(key, (gofoBundleByKey.get(key) || 0) + count);
+        }
+        gofoBundleByCity.set(city, (gofoBundleByCity.get(city) || 0) + count);
+      }
+    }
+
+    function bundleWarehouse(section, city) {
+      if (section === "jfk_pwm") return city === "PWM" ? "PWM417" : "JFK175";
+      if (section === "bwi") return "BWI.H";
+      if (section === "ewr_one" || section === "ewr_multi") return "EWR.H";
+      return "";
+    }
+
+    function bundleCountFor(section, cities) {
+      let total = 0;
+      for (const city of cities) {
+        const warehouse = bundleWarehouse(section, city);
+        total += warehouse
+          ? (gofoBundleByKey.get(`${warehouse}|${city}`) || 0)
+          : (gofoBundleByCity.get(city) || 0);
+      }
+      return total;
+    }
+
+    function withBundleCounts(section, breakdown) {
+      return (breakdown || []).map((row) => ({
+        ...row,
+        bundle_count: bundleCountFor(section, [row.city]),
+      }));
     }
 
     function renderGofoTiles(latestRows, mixedRows) {
@@ -1767,16 +1812,16 @@
           .sort((a, b) => a.code.localeCompare(b.code));
         if (!rows.length && !(key === "jfk_pwm" && jfkMixed.length)) return "";
         if (key === "bwi") {
-          const bwiBundles = warehouseBundleCount(latestRows, mixed, ["bwi"], "BWI.H");
+          const bwiBundles = gofoBundleByWarehouse.get("BWI.H") || 0;
           title = `BWI.H (8am-7pm outbound) - ${fmt(bwiTotal)} Bundle count: ${fmt(bwiBundles)}`;
         }
         const titleClass = key === "bwi" || key === "jfk_pwm" ? "city-module-title plain" : "city-module-title";
-        const ewrBundles = warehouseBundleCount(latestRows, mixed, ["ewr_one", "ewr_multi"], "EWR.H");
+        const ewrBundles = gofoBundleByWarehouse.get("EWR.H") || 0;
         const ewrLine = key === "ewr_one"
           ? `<p class="city-module-title plain">EWR.H (9am-11pm outbound) - ${fmt(ewrTotal)} Bundle count: ${fmt(ewrBundles)}</p>`
           : "";
         const body = rows.map((r) => {
-          const bundleCount = r.chute_count == null ? null : Number(r.chute_count);
+          const bundleCount = bundleCountFor(r.section, [r.code]);
           if (r.section === "uni_hub" && GOFO_ROLLUP[r.code]) {
             const partMap = new Map(gofoUniPartLatest.map((part) => [part.code, part]));
             const summed = sumCityParts(partMap, GOFO_ROLLUP[r.code]);
@@ -1784,11 +1829,11 @@
               r.code,
               summed.total_volume,
               summed.delta_volume,
-              summed.breakdown,
+              withBundleCounts(r.section, summed.breakdown),
               gofoChartSelection,
               r.city,
               [],
-              summed.chute_count
+              bundleCountFor(r.section, GOFO_ROLLUP[r.code])
             );
           }
           if (r.section === "jfk_pwm" && r.code === "JFK" && (gofoJfkPartLatest.length || jfkMixed.length)) {
@@ -1796,24 +1841,22 @@
             const parts = [...partMap.keys()].sort((a, b) => a.localeCompare(b));
             const summed = sumCityParts(partMap, parts);
             const chuteLines = jfkMixed.map((chute) => {
-              const cities = String(chute.cities || "").replace(/,/g, "");
+              const cities = String(chute.cities || "").replace(/,/g, " ");
               return {
                 label: `Chute ${chute.chute_id} (${cities})`,
                 volume: Number(chute.volume || 0),
-                chute_count: 1,
               };
             });
             const chuteVolume = jfkMixed.reduce((sum, chute) => sum + Number(chute.volume || 0), 0);
-            const jfkBundles = (summed.chute_count || 0) + jfkMixed.length;
             return tileHtml(
               r.code,
               summed.total_volume + chuteVolume,
               summed.delta_volume,
-              summed.breakdown,
+              withBundleCounts(r.section, summed.breakdown),
               gofoChartSelection,
               r.city,
               chuteLines,
-              jfkBundles
+              bundleCountFor(r.section, parts)
             );
           }
           return tileHtml(r.code, r.total_volume, r.delta_volume, null, gofoChartSelection, r.city, [], bundleCount);
@@ -1888,10 +1931,12 @@
       const batch = gofoBatches[Number($("gofo-batch").value)];
       if (!batch || String(batch.subbatch_date || "") < GOFO_FIRST_OPS_DAY) return;
       renderMeta(batch, "gofo-meta");
-      let [series, mixed] = await Promise.all([
+      let [series, mixed, bundleRows] = await Promise.all([
         rpc("gofo_city_volume_series", { p_subbatch: batch.subbatch }),
         rpc("gofo_mixed_chutes", { p_subbatch: batch.subbatch }),
+        rpc("gofo_bundle_counts", { p_operation_date: batch.subbatch_date }),
       ]);
+      rememberBundleCounts(bundleRows);
       series = series
         .filter((r) => r.city && r.section)
         .map((r) => ({ ...r, code: r.city, city: `${r.section}|${r.city}` }));
@@ -1975,6 +2020,17 @@
     $("gofo-reload").addEventListener("click", () => {
       loadGofoBatches().then(loadGofoSeries).catch((e) => showError("gofo-error", e));
     });
+    document.addEventListener("toggle", (event) => {
+      const menu = event.target;
+      if (!(menu instanceof HTMLDetailsElement) || !menu.classList.contains("tile-menu") || !menu.open) return;
+      const panel = menu.querySelector(".tile-menu-panel");
+      if (!panel) return;
+      panel.classList.remove("align-end");
+      const opened = panel.getBoundingClientRect();
+      if (opened.right > window.innerWidth - 8) panel.classList.add("align-end");
+      const flipped = panel.getBoundingClientRect();
+      if (flipped.left < 8) panel.classList.remove("align-end");
+    }, true);
     $("gofo-tiles").addEventListener("click", (event) => {
       if (event.target.closest("details.tile-menu")) return;
       const tile = event.target.closest(".tile[data-city]");
