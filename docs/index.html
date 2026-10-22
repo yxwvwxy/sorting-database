@@ -406,6 +406,50 @@
       font-size: 0.85rem;
       color: var(--mint);
     }
+    .count-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+      gap: 0.65rem;
+      margin-bottom: 1.15rem;
+    }
+    .count-tile {
+      border: 1px solid var(--line);
+      background: rgba(0,0,0,0.22);
+      padding: 0.75rem 0.85rem;
+    }
+    .count-tile .code {
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 0.78rem;
+      color: var(--mint);
+      letter-spacing: 0.03em;
+    }
+    .count-tile .vol {
+      margin-top: 0.2rem;
+      font-size: 1.35rem;
+      font-weight: 700;
+    }
+    .count-tile .parts {
+      margin-top: 0.35rem;
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 0.72rem;
+      line-height: 1.45;
+      color: var(--muted);
+    }
+    .bundle-table-wrap { overflow-x: auto; margin: 0 0 1.15rem; }
+    .bundle-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 0.78rem;
+    }
+    .bundle-table th,
+    .bundle-table td {
+      text-align: left;
+      padding: 0.38rem 0.55rem;
+      border-bottom: 1px solid var(--line);
+      white-space: nowrap;
+    }
+    .bundle-table th { color: var(--muted); font-weight: 500; }
     .feed-chart-wrap {
       display: grid;
       grid-template-columns: 1fr 168px;
@@ -507,6 +551,7 @@
 
     <nav id="app-tabs" class="app-tabs hidden" aria-label="Dashboard sections">
       <button type="button" class="app-tab" data-tab="gofo" id="tab-gofo">Gofo</button>
+      <button type="button" class="app-tab" data-tab="bundle" id="tab-bundle">Bundle</button>
       <button type="button" class="app-tab" data-tab="feed" id="tab-feed">Feed &amp; hourly</button>
       <button type="button" class="app-tab" data-tab="city" id="tab-city">City / hub</button>
     </nav>
@@ -529,6 +574,21 @@
       <h2 style="margin-top:1.35rem">Growth chart</h2>
       <p id="gofo-chart-caption" class="caption">Showing JFK, PWM</p>
       <div class="panel"><div id="gofo-chart"></div></div>
+    </section>
+
+    <section id="bundle-section" class="section hidden">
+      <h2>Bundle</h2>
+      <div class="controls">
+        <label>Batch / ops day
+          <select id="bundle-batch"></select>
+        </label>
+        <label>&nbsp;
+          <button id="bundle-reload" type="button">Refresh</button>
+        </label>
+      </div>
+      <div id="bundle-meta" class="meta"></div>
+      <p id="bundle-error" class="error hidden"></p>
+      <div id="bundle-body"></div>
     </section>
 
     <section id="city-section" class="section hidden">
@@ -642,6 +702,7 @@
     let batches = [];
     let feedBatches = [];
     let gofoBatches = [];
+    let bundleBatches = [];
     let feedLayers = []; // per-station hourly totals
     let feedHourTabs = []; // :30 hour buckets
     let feedLatest = [];
@@ -693,7 +754,7 @@
 
     function visibleTabs() {
       const tabs = [];
-      if (hasRole("city") || hasRole("feed")) tabs.push("gofo");
+      if (hasRole("city") || hasRole("feed")) tabs.push("gofo", "bundle");
       if (hasRole("feed")) tabs.push("feed");
       if (hasRole("city")) tabs.push("city");
       return tabs;
@@ -723,11 +784,12 @@
       activeTab = tab;
 
       $("gofo-section").classList.toggle("hidden", tab !== "gofo");
+      $("bundle-section").classList.toggle("hidden", tab !== "bundle");
       $("feed-section").classList.toggle("hidden", tab !== "feed");
       $("city-section").classList.toggle("hidden", tab !== "city");
       $("app-tabs").classList.toggle("hidden", tabs.length < 2);
 
-      for (const name of ["gofo", "feed", "city"]) {
+      for (const name of ["gofo", "bundle", "feed", "city"]) {
         const btn = $(`tab-${name}`);
         if (!btn) continue;
         btn.classList.toggle("hidden", !tabs.includes(name));
@@ -1018,6 +1080,7 @@
       if (!tabs.length) {
         $("app-tabs").classList.add("hidden");
         $("gofo-section").classList.add("hidden");
+        $("bundle-section").classList.add("hidden");
         $("city-section").classList.add("hidden");
         $("feed-section").classList.add("hidden");
         return;
@@ -1971,25 +2034,157 @@
       applyGofoChart();
     }
 
+    const BUNDLE_UNI_TILES = [
+      { code: "ATL", parts: ["ATL"] },
+      { code: "MIA", parts: ["MIA"] },
+      { code: "ORD", parts: ["ORD"] },
+      { code: "DFW", parts: ["DFW", "DEN", "IAH", "SLC"] },
+      { code: "LAX", parts: ["LAX", "SJC", "SEA"] },
+    ];
+    const BUNDLE_GROUPS = [
+      ["jfk", "JFK"],
+      ["pwm", "PWM"],
+      ["ewr", "EWR.H"],
+      ["ewr_one", "EWR.H · one route"],
+      ["ewr_multi", "EWR.H · multiple routes"],
+      ["bwi", "BWI.H"],
+    ];
+
+    function esc(value) {
+      return String(value ?? "").replace(/[&<>"']/g, (ch) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;",
+      }[ch]));
+    }
+
+    function bundleCount(rows, group, place) {
+      const row = rows.find((r) => r.row_kind === "count" && r.group_name === group && r.place === place);
+      return Number(row ? row.bundle_count : 0);
+    }
+
+    function countTile(code, total, partsLine) {
+      const parts = partsLine ? `<div class="parts">${esc(partsLine)}</div>` : "";
+      return `<div class="count-tile"><div class="code">${esc(code)}</div><div class="vol">${fmt(total)}</div>${parts}</div>`;
+    }
+
+    function bundleTable(rows) {
+      if (!rows.length) return `<p class="caption">None</p>`;
+      const body = rows.map((r) => `
+        <tr>
+          <td>${fmt(r.shipment_count)}</td>
+          <td>${esc(r.warehouse)}</td>
+          <td>${esc(r.area || "-")}</td>
+          <td>${esc(r.status)}</td>
+          <td>${r.generated_time ? esc(toEt(r.generated_time)) : ""}</td>
+          <td>${esc(r.bundle_id)}</td>
+        </tr>`).join("");
+      return `
+        <div class="bundle-table-wrap">
+          <table class="bundle-table">
+            <thead>
+              <tr><th>SHPT</th><th>Dest. WHS</th><th>Area</th><th>Status</th><th>Generated</th><th>Bundle ID</th></tr>
+            </thead>
+            <tbody>${body}</tbody>
+          </table>
+        </div>`;
+    }
+
+    function shipmentBlocks(rows) {
+      const low = rows
+        .filter((r) => Number(r.shipment_count) < 100)
+        .sort((a, b) => Number(a.shipment_count) - Number(b.shipment_count) || String(a.bundle_id).localeCompare(String(b.bundle_id)));
+      const high = rows
+        .filter((r) => Number(r.shipment_count) > 300)
+        .sort((a, b) => Number(b.shipment_count) - Number(a.shipment_count) || String(a.bundle_id).localeCompare(String(b.bundle_id)));
+      return `
+        <p class="city-module-title plain">shipment &lt; 100 · ${fmt(low.length)}</p>
+        ${bundleTable(low)}
+        <p class="city-module-title plain">shipment &gt; 300 · ${fmt(high.length)}</p>
+        ${bundleTable(high)}`;
+    }
+
+    function renderBundle(batch, rows) {
+      const uniRows = rows.filter((r) => r.row_kind === "count" && r.group_name === "uni_hub");
+      const covered = new Set(BUNDLE_UNI_TILES.flatMap((tile) => tile.parts));
+      const extra = uniRows
+        .map((r) => r.place)
+        .filter((place) => place && !covered.has(place))
+        .sort((a, b) => a.localeCompare(b));
+      const uniTiles = [
+        ...BUNDLE_UNI_TILES.map((tile) => {
+          const total = tile.parts.reduce((sum, place) => sum + bundleCount(rows, "uni_hub", place), 0);
+          const partsLine = tile.parts.length > 1
+            ? tile.parts.map((place) => `${place} ${fmt(bundleCount(rows, "uni_hub", place))}`).join(" · ")
+            : "";
+          return countTile(tile.code, total, partsLine);
+        }),
+        ...extra.map((place) => countTile(place, bundleCount(rows, "uni_hub", place), "")),
+      ].join("");
+      const groupTiles = BUNDLE_GROUPS.map(([group, label]) => {
+        const place = group === "jfk" ? "JFK" : group === "pwm" ? "PWM" : group === "bwi" ? "BWI.H" : "EWR.H";
+        return countTile(label, bundleCount(rows, group, place), "");
+      }).join("");
+      const total = ["uni_hub", "jfk", "pwm", "ewr", "bwi"].reduce((sum, group) => {
+        return sum + rows
+          .filter((r) => r.row_kind === "count" && r.group_name === group)
+          .reduce((inner, r) => inner + Number(r.bundle_count || 0), 0);
+      }, 0);
+      $("bundle-meta").innerHTML = `
+        <span>ops day <strong>${esc(batch.subbatch_date)}</strong></span>
+        <span>batch <strong>${esc(batch.subbatch)}</strong></span>
+        <span>bundles <strong>${fmt(total)}</strong></span>
+      `;
+      const outliers = rows.filter((r) => r.row_kind === "outlier");
+      $("bundle-body").innerHTML = `
+        <h2>UniHub</h2>
+        <div class="count-grid">${uniTiles}</div>
+        <div class="count-grid">${groupTiles}</div>
+        <h2>EWR.H · one route</h2>
+        ${shipmentBlocks(outliers.filter((r) => r.group_name === "ewr_one"))}
+        <h2>Other</h2>
+        ${shipmentBlocks(outliers.filter((r) => r.group_name !== "ewr_one"))}
+      `;
+    }
+
+    async function loadBundleBatches() {
+      const cutoff = etDaysAgoYmd(6);
+      const all = await rpc("list_gofo_batches", { p_limit: 100 });
+      bundleBatches = all.filter((b) =>
+        String(b.subbatch_date || "") >= cutoff &&
+        String(b.subbatch_date || "") >= GOFO_FIRST_OPS_DAY
+      );
+      $("bundle-batch").innerHTML = bundleBatches.map((b, i) => {
+        const label = `${b.subbatch_date} · ${b.subbatch} · ${b.scrape_count} snaps · ${fmt(b.latest_total)}`;
+        return `<option value="${i}">${label}</option>`;
+      }).join("");
+    }
+
+    async function loadBundleBoard() {
+      showError("bundle-error", null);
+      const batch = bundleBatches[Number($("bundle-batch").value)];
+      if (!batch || String(batch.subbatch_date || "") < GOFO_FIRST_OPS_DAY) return;
+      const rows = await rpc("bundle_board", { p_operation_date: batch.subbatch_date });
+      renderBundle(batch, rows);
+    }
+
     async function bootApp() {
-      try {
-        if (visibleTabs().includes("gofo")) {
-          await loadGofoBatches();
-          await loadGofoSeries();
-        }
-        if (hasRole("city")) {
-          await loadBatchesInto("batch", "city");
-          await loadCitySeries();
-        }
-        if (hasRole("feed")) {
-          await loadBatchesInto("feed-batch", "feed");
-          await loadFeedSeries();
-        }
-      } catch (err) {
-        if (visibleTabs().includes("gofo")) showError("gofo-error", err);
-        if (hasRole("city")) showError("error", err);
-        if (hasRole("feed")) showError("feed-error", err);
+      const tasks = [];
+      if (visibleTabs().includes("gofo")) {
+        tasks.push(loadGofoBatches().then(loadGofoSeries).catch((err) => showError("gofo-error", err)));
       }
+      if (visibleTabs().includes("bundle")) {
+        tasks.push(loadBundleBatches().then(loadBundleBoard).catch((err) => showError("bundle-error", err)));
+      }
+      if (hasRole("city")) {
+        tasks.push(loadBatchesInto("batch", "city").then(loadCitySeries).catch((err) => showError("error", err)));
+      }
+      if (hasRole("feed")) {
+        tasks.push(loadBatchesInto("feed-batch", "feed").then(loadFeedSeries).catch((err) => showError("feed-error", err)));
+      }
+      await Promise.all(tasks);
     }
 
     $("batch").addEventListener("change", () => {
@@ -2023,6 +2218,10 @@
     $("gofo-batch").addEventListener("change", () => loadGofoSeries().catch((e) => showError("gofo-error", e)));
     $("gofo-reload").addEventListener("click", () => {
       loadGofoBatches().then(loadGofoSeries).catch((e) => showError("gofo-error", e));
+    });
+    $("bundle-batch").addEventListener("change", () => loadBundleBoard().catch((e) => showError("bundle-error", e)));
+    $("bundle-reload").addEventListener("click", () => {
+      loadBundleBatches().then(loadBundleBoard).catch((e) => showError("bundle-error", e));
     });
     document.addEventListener("toggle", (event) => {
       const menu = event.target;
@@ -2102,6 +2301,7 @@
         batches = [];
         feedBatches = [];
         gofoBatches = [];
+        bundleBatches = [];
         cityChartModel = { series: [], cities: [] };
         cityChartSelection = CITY_CHART_DEFAULT.slice();
         gofoChartModel = { series: [], cities: [] };
@@ -2114,6 +2314,8 @@
         $("app-tabs").classList.add("hidden");
         $("tiles").innerHTML = "";
         $("gofo-tiles").innerHTML = "";
+        $("bundle-body").innerHTML = "";
+        $("bundle-meta").innerHTML = "";
         $("upper-cards").innerHTML = "";
         $("lower-cards").innerHTML = "";
         $("hourly-total").textContent = "—";
