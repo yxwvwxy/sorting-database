@@ -459,29 +459,29 @@
       white-space: nowrap;
     }
     .bundle-table th { color: var(--muted); font-weight: 500; }
-    .chute-count-table { max-width: 22rem; margin-top: 0.4rem; }
-    .chute-count-table td { text-align: right; font-variant-numeric: tabular-nums; }
+    .chute-count-table { max-width: 28rem; margin-top: 0.4rem; }
+    .chute-count-table th,
+    .chute-count-table td { text-align: left; color: var(--ink); }
+    .chute-count-table thead th { color: var(--ink); font-weight: 500; }
     .chute-count-table tr.total th,
-    .chute-count-table tr.total td { color: var(--ink); font-weight: 600; }
+    .chute-count-table tr.total td { font-weight: 600; }
     .chute-count-table tr.chute-child { display: none; }
     .chute-count-table tr.chute-child.open { display: table-row; }
-    .chute-count-table tr.chute-child th {
-      padding-left: 1.7rem;
-      color: var(--muted);
-      font-weight: 400;
-    }
+    .chute-count-table tr.chute-child th { padding-left: 1.7rem; font-weight: 400; }
+    .chute-label { display: inline-flex; align-items: center; gap: 0.45rem; }
     button.chute-toggle {
       background: transparent;
       border: 0;
-      color: var(--mint);
+      color: var(--ink);
       font: inherit;
-      font-weight: 500;
+      font-weight: 400;
+      line-height: 1;
       padding: 0;
       filter: none;
     }
-    button.chute-toggle::before { content: "▸  "; color: var(--muted); font-weight: 400; }
-    button.chute-toggle[aria-expanded="true"]::before { content: "▾  "; }
-    button.chute-toggle:hover { filter: none; color: var(--ink); }
+    button.chute-toggle::after { content: "▸"; }
+    button.chute-toggle[aria-expanded="true"]::after { content: "▾"; }
+    button.chute-toggle:hover { filter: none; }
     .bundle-table.status-board th,
     .bundle-table.status-board td { text-align: left; }
     .bundle-table.status-board thead th { color: var(--ink); }
@@ -2136,7 +2136,7 @@
           : item.total(rows);
         const expanded = open.has(item.code);
         const label = parts.length
-          ? `<button type="button" class="chute-toggle" data-code="${esc(item.code)}" aria-expanded="${expanded ? "true" : "false"}">${esc(item.code)}</button>`
+          ? `<span class="chute-label"><span>${esc(item.code)}</span><button type="button" class="chute-toggle" data-code="${esc(item.code)}" aria-expanded="${expanded ? "true" : "false"}" aria-label="Show ${esc(item.code)}"></button></span>`
           : esc(item.code);
         const children = parts.map((part) => `
           <tr class="chute-child${expanded ? " open" : ""}" data-parent="${esc(item.code)}">
@@ -2150,7 +2150,7 @@
       }, 0);
       host.innerHTML = `
         <table class="bundle-table chute-count-table">
-          <thead><tr><th></th><th>Chutes</th></tr></thead>
+          <thead><tr><th>Dest. warehouse</th><th>Chute count</th></tr></thead>
           <tbody>
             ${body}
             <tr class="total"><th>Total</th><td>${fmt(total)}</td></tr>
