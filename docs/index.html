@@ -474,6 +474,38 @@
       color: var(--muted);
       font-size: 0.85rem;
     }
+    .status-board-row {
+      display: flex;
+      align-items: flex-start;
+      margin: 0 0 1.15rem;
+    }
+    .status-board-row .bundle-table-wrap { width: auto; margin: 0; }
+    .status-board-row .bundle-table { width: auto; }
+    .status-side {
+      display: flex;
+      align-items: flex-start;
+    }
+    .status-side > .bundle-table-wrap { order: 1; }
+    .status-side > summary {
+      order: 2;
+      list-style: none;
+      cursor: pointer;
+      align-self: stretch;
+      width: 1.7rem;
+      display: flex;
+      justify-content: center;
+      padding-top: 0.48rem;
+    }
+    .status-side > summary::-webkit-details-marker { display: none; }
+    .status-side > summary::before {
+      content: "";
+      width: 0.42rem;
+      height: 0.42rem;
+      border-right: 2px solid var(--muted);
+      border-bottom: 2px solid var(--muted);
+      transform: rotate(-45deg);
+    }
+    .status-side[open] > summary::before { transform: rotate(135deg); }
     .feed-chart-wrap {
       display: grid;
       grid-template-columns: 1fr 168px;
@@ -2061,7 +2093,6 @@
       applyGofoChart();
     }
 
-    const BUNDLE_STATUS_ORDER = ["Created", "Shipped", "Arrived", "Inbound", "Draft", "Cancelled"];
     const BUNDLE_STATUS_ROWS = [
       { code: "EWR.H", keys: [["ewr", "EWR.H"]] },
       { code: "BWI.H", keys: [["bwi", "BWI.H"]] },
@@ -2136,24 +2167,27 @@
 
     function renderBundle(batch, rows) {
       const counts = rows.filter((r) => r.row_kind === "count" && ["uni_hub", "jfk", "pwm", "ewr", "bwi"].includes(r.group_name));
-      const known = new Set(BUNDLE_STATUS_ORDER);
-      const statuses = [
-        ...BUNDLE_STATUS_ORDER,
+      const visible = ["Created", "Shipped", "Arrived"];
+      const foldOrder = ["Inbound", "Draft", "Cancelled"];
+      const known = new Set([...visible, ...foldOrder]);
+      const folded = [
+        ...foldOrder,
         ...[...new Set(counts.map((r) => String(r.status || "")).filter((status) => status && !known.has(status)))].sort(),
       ];
-      const header = ["", "Total", ...statuses].map((label) => `<th>${esc(label)}</th>`).join("");
-      const body = BUNDLE_STATUS_ROWS.map((place) => {
+      const statusCells = (place, statuses) => statuses.map((status) => {
+        const count = place.keys.reduce((sum, [group, name]) => sum + bundleStatusCount(counts, group, name, status), 0);
+        return `<td class="${count ? "" : "zero"}">${fmt(count)}</td>`;
+      }).join("");
+      const mainBody = BUNDLE_STATUS_ROWS.map((place) => {
         const total = place.keys.reduce((sum, [group, name]) => {
           return sum + counts
             .filter((r) => r.group_name === group && r.place === name)
             .reduce((inner, r) => inner + Number(r.bundle_count || 0), 0);
         }, 0);
-        const cells = statuses.map((status) => {
-          const count = place.keys.reduce((sum, [group, name]) => sum + bundleStatusCount(counts, group, name, status), 0);
-          return `<td class="${count ? "" : "zero"}">${fmt(count)}</td>`;
-        });
-        return `<tr><th>${esc(place.code)}</th><td>${fmt(total)}</td>${cells.join("")}</tr>`;
+        return `<tr><th>${esc(place.code)}</th><td>${fmt(total)}</td>${statusCells(place, visible)}</tr>`;
       }).join("");
+      const extraHead = folded.map((status) => `<th>${esc(status)}</th>`).join("");
+      const extraBody = BUNDLE_STATUS_ROWS.map((place) => `<tr>${statusCells(place, folded)}</tr>`).join("");
       const total = counts.reduce((sum, r) => sum + Number(r.bundle_count || 0), 0);
       $("bundle-meta").innerHTML = `
         <span>ops day <strong>${esc(batch.subbatch_date)}</strong></span>
@@ -2163,11 +2197,22 @@
       const outliers = rows.filter((r) => r.row_kind === "outlier");
       $("bundle-body").innerHTML = `
         <p class="caption">Each bundle is counted at its latest status. The hourly export can move it to another status.</p>
-        <div class="bundle-table-wrap">
-          <table class="bundle-table status-board">
-            <thead><tr>${header}</tr></thead>
-            <tbody>${body}</tbody>
-          </table>
+        <div class="status-board-row">
+          <div class="bundle-table-wrap">
+            <table class="bundle-table status-board">
+              <thead><tr><th></th><th>Total</th><th>Created</th><th>Shipped</th><th>Arrived</th></tr></thead>
+              <tbody>${mainBody}</tbody>
+            </table>
+          </div>
+          <details class="status-side">
+            <summary title="Inbound, Draft, Cancelled"></summary>
+            <div class="bundle-table-wrap">
+              <table class="bundle-table status-board">
+                <thead><tr>${extraHead}</tr></thead>
+                <tbody>${extraBody}</tbody>
+              </table>
+            </div>
+          </details>
         </div>
         <h2>EWR.H · one route</h2>
         ${shipmentBlocks(outliers.filter((r) => r.group_name === "ewr_one"))}
