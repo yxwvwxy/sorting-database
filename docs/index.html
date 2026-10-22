@@ -408,7 +408,7 @@
     }
     .count-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
       gap: 0.65rem;
       margin-bottom: 1.15rem;
     }
@@ -429,10 +429,19 @@
       font-weight: 700;
     }
     .count-tile .parts {
-      margin-top: 0.35rem;
+      margin-top: 0.45rem;
+      padding-top: 0.4rem;
+      border-top: 1px solid var(--line);
+      display: grid;
+      gap: 0.28rem;
+    }
+    .count-tile .part-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.25rem 0.7rem;
       font-family: "IBM Plex Mono", monospace;
       font-size: 0.72rem;
-      line-height: 1.45;
+      line-height: 1.35;
       color: var(--muted);
     }
     .bundle-table-wrap { overflow-x: auto; margin: 0 0 1.15rem; }
@@ -2034,21 +2043,10 @@
       applyGofoChart();
     }
 
-    const BUNDLE_UNI_TILES = [
-      { code: "ATL", parts: ["ATL"] },
-      { code: "MIA", parts: ["MIA"] },
-      { code: "ORD", parts: ["ORD"] },
-      { code: "DFW", parts: ["DFW", "DEN", "IAH", "SLC"] },
-      { code: "LAX", parts: ["LAX", "SJC", "SEA"] },
-    ];
-    const BUNDLE_GROUPS = [
-      ["jfk", "JFK"],
-      ["pwm", "PWM"],
-      ["ewr", "EWR.H"],
-      ["ewr_one", "EWR.H · one route"],
-      ["ewr_multi", "EWR.H · multiple routes"],
-      ["bwi", "BWI.H"],
-    ];
+    const BUNDLE_ROLLUPS = {
+      DFW: ["DEN", "DFW", "IAH", "SLC"],
+      LAX: ["LAX", "SEA", "SJC"],
+    };
 
     function esc(value) {
       return String(value ?? "").replace(/[&<>"']/g, (ch) => ({
@@ -2065,9 +2063,14 @@
       return Number(row ? row.bundle_count : 0);
     }
 
-    function countTile(code, total, partsLine) {
-      const parts = partsLine ? `<div class="parts">${esc(partsLine)}</div>` : "";
-      return `<div class="count-tile"><div class="code">${esc(code)}</div><div class="vol">${fmt(total)}</div>${parts}</div>`;
+    function countTile(code, total, parts) {
+      const rows = [];
+      for (let i = 0; i < (parts || []).length; i += 2) {
+        const pair = parts.slice(i, i + 2).map((part) => `<span>${esc(part.label)} ${fmt(part.count)}</span>`).join("");
+        rows.push(`<div class="part-row">${pair}</div>`);
+      }
+      const breakdown = rows.length ? `<div class="parts">${rows.join("")}</div>` : "";
+      return `<div class="count-tile"><div class="code">${esc(code)}</div><div class="vol">${fmt(total)}</div>${breakdown}</div>`;
     }
 
     function bundleTable(rows) {
@@ -2108,25 +2111,26 @@
 
     function renderBundle(batch, rows) {
       const uniRows = rows.filter((r) => r.row_kind === "count" && r.group_name === "uni_hub");
-      const covered = new Set(BUNDLE_UNI_TILES.flatMap((tile) => tile.parts));
-      const extra = uniRows
-        .map((r) => r.place)
-        .filter((place) => place && !covered.has(place))
-        .sort((a, b) => a.localeCompare(b));
-      const uniTiles = [
-        ...BUNDLE_UNI_TILES.map((tile) => {
-          const total = tile.parts.reduce((sum, place) => sum + bundleCount(rows, "uni_hub", place), 0);
-          const partsLine = tile.parts.length > 1
-            ? tile.parts.map((place) => `${place} ${fmt(bundleCount(rows, "uni_hub", place))}`).join(" · ")
-            : "";
-          return countTile(tile.code, total, partsLine);
-        }),
-        ...extra.map((place) => countTile(place, bundleCount(rows, "uni_hub", place), "")),
-      ].join("");
-      const groupTiles = BUNDLE_GROUPS.map(([group, label]) => {
-        const place = group === "jfk" ? "JFK" : group === "pwm" ? "PWM" : group === "bwi" ? "BWI.H" : "EWR.H";
-        return countTile(label, bundleCount(rows, group, place), "");
-      }).join("");
+      const rolled = new Set(Object.values(BUNDLE_ROLLUPS).flat());
+      const tiles = [
+        { code: "ATL", total: bundleCount(rows, "uni_hub", "ATL"), parts: [] },
+        { code: "BWI.H", total: bundleCount(rows, "bwi", "BWI.H"), parts: [] },
+        { code: "DFW", total: BUNDLE_ROLLUPS.DFW.reduce((sum, place) => sum + bundleCount(rows, "uni_hub", place), 0), parts: BUNDLE_ROLLUPS.DFW.map((place) => ({ label: place, count: bundleCount(rows, "uni_hub", place) })) },
+        { code: "EWR.H", total: bundleCount(rows, "ewr", "EWR.H"), parts: [
+          { label: "one route", count: bundleCount(rows, "ewr_one", "EWR.H") },
+          { label: "multiple routes", count: bundleCount(rows, "ewr_multi", "EWR.H") },
+        ] },
+        { code: "JFK", total: bundleCount(rows, "jfk", "JFK"), parts: [] },
+        { code: "LAX", total: BUNDLE_ROLLUPS.LAX.reduce((sum, place) => sum + bundleCount(rows, "uni_hub", place), 0), parts: BUNDLE_ROLLUPS.LAX.map((place) => ({ label: place, count: bundleCount(rows, "uni_hub", place) })) },
+        { code: "MIA", total: bundleCount(rows, "uni_hub", "MIA"), parts: [] },
+        { code: "ORD", total: bundleCount(rows, "uni_hub", "ORD"), parts: [] },
+        { code: "PWM", total: bundleCount(rows, "pwm", "PWM"), parts: [] },
+        ...uniRows
+          .map((r) => r.place)
+          .filter((place) => place && !rolled.has(place) && !["ATL", "MIA", "ORD"].includes(place))
+          .map((place) => ({ code: place, total: bundleCount(rows, "uni_hub", place), parts: [] })),
+      ].sort((a, b) => a.code.localeCompare(b.code));
+      const regionTiles = tiles.map((tile) => countTile(tile.code, tile.total, tile.parts)).join("");
       const total = ["uni_hub", "jfk", "pwm", "ewr", "bwi"].reduce((sum, group) => {
         return sum + rows
           .filter((r) => r.row_kind === "count" && r.group_name === group)
@@ -2139,9 +2143,7 @@
       `;
       const outliers = rows.filter((r) => r.row_kind === "outlier");
       $("bundle-body").innerHTML = `
-        <h2>UniHub</h2>
-        <div class="count-grid">${uniTiles}</div>
-        <div class="count-grid">${groupTiles}</div>
+        <div class="count-grid">${regionTiles}</div>
         <h2>EWR.H · one route</h2>
         ${shipmentBlocks(outliers.filter((r) => r.group_name === "ewr_one"))}
         <h2>Other</h2>
