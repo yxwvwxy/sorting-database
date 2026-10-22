@@ -1815,6 +1815,10 @@
           const bwiBundles = gofoBundleByWarehouse.get("BWI.H") || 0;
           title = `BWI.H (8am-7pm outbound) - ${fmt(bwiTotal)} Bundle count: ${fmt(bwiBundles)}`;
         }
+        if (key === "ewr_one" || key === "ewr_multi") {
+          const sectionBundles = bundleCountFor(key, rows.map((r) => r.code));
+          title = `${title} Bundle count: ${fmt(sectionBundles)}`;
+        }
         const titleClass = key === "bwi" || key === "jfk_pwm" ? "city-module-title plain" : "city-module-title";
         const ewrBundles = gofoBundleByWarehouse.get("EWR.H") || 0;
         const ewrLine = key === "ewr_one"
