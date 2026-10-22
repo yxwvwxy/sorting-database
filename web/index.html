@@ -462,13 +462,18 @@
     .bundle-table.status-board th,
     .bundle-table.status-board td { text-align: right; }
     .bundle-table.status-board th:first-child,
-    .bundle-table.status-board td:first-child,
     .bundle-table.status-board tbody th {
       text-align: left;
       color: var(--mint);
       font-weight: 500;
     }
     .bundle-table.status-board td.zero { color: var(--muted); }
+    .bundle-fold { margin: -0.4rem 0 1.15rem; }
+    .bundle-fold summary {
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
     .feed-chart-wrap {
       display: grid;
       grid-template-columns: 1fr 168px;
@@ -2056,7 +2061,7 @@
       applyGofoChart();
     }
 
-    const BUNDLE_STATUS_ORDER = ["Created", "Arrived", "Shipped"];
+    const BUNDLE_STATUS_ORDER = ["Created", "Shipped", "Arrived", "Inbound", "Draft", "Cancelled"];
     const BUNDLE_STATUS_ROWS = [
       { code: "EWR.H", keys: [["ewr", "EWR.H"]] },
       { code: "BWI.H", keys: [["bwi", "BWI.H"]] },
@@ -2101,6 +2106,18 @@
         </div>`;
     }
 
+    function shipmentBand(title, rows) {
+      const created = rows.filter((r) => String(r.status || "").toLowerCase() === "created");
+      const other = rows.filter((r) => String(r.status || "").toLowerCase() !== "created");
+      const folded = other.length
+        ? `<details class="bundle-fold"><summary>Other statuses · ${fmt(other.length)}</summary>${bundleTable(other)}</details>`
+        : "";
+      return `
+        <p class="city-module-title plain">${title} · ${fmt(created.length)}</p>
+        ${bundleTable(created)}
+        ${folded}`;
+    }
+
     function shipmentBlocks(rows) {
       const low = rows
         .filter((r) => Number(r.shipment_count) < 100)
@@ -2108,11 +2125,7 @@
       const high = rows
         .filter((r) => Number(r.shipment_count) > 300)
         .sort((a, b) => Number(b.shipment_count) - Number(a.shipment_count) || String(a.bundle_id).localeCompare(String(b.bundle_id)));
-      return `
-        <p class="city-module-title plain">shipment &lt; 100 · ${fmt(low.length)}</p>
-        ${bundleTable(low)}
-        <p class="city-module-title plain">shipment &gt; 300 · ${fmt(high.length)}</p>
-        ${bundleTable(high)}`;
+      return `${shipmentBand("shipment &lt; 100", low)}${shipmentBand("shipment &gt; 300", high)}`;
     }
 
     function bundleStatusCount(rows, group, place, status) {
@@ -2125,21 +2138,21 @@
       const counts = rows.filter((r) => r.row_kind === "count" && ["uni_hub", "jfk", "pwm", "ewr", "bwi"].includes(r.group_name));
       const known = new Set(BUNDLE_STATUS_ORDER);
       const statuses = [
-        ...BUNDLE_STATUS_ORDER.filter((status) => counts.some((r) => r.status === status)),
+        ...BUNDLE_STATUS_ORDER,
         ...[...new Set(counts.map((r) => String(r.status || "")).filter((status) => status && !known.has(status)))].sort(),
       ];
-      const header = ["", ...statuses, "Total"].map((label) => `<th>${esc(label)}</th>`).join("");
+      const header = ["", "Total", ...statuses].map((label) => `<th>${esc(label)}</th>`).join("");
       const body = BUNDLE_STATUS_ROWS.map((place) => {
-        const cells = statuses.map((status) => {
-          const count = place.keys.reduce((sum, [group, name]) => sum + bundleStatusCount(counts, group, name, status), 0);
-          return `<td class="${count ? "" : "zero"}">${fmt(count)}</td>`;
-        });
         const total = place.keys.reduce((sum, [group, name]) => {
           return sum + counts
             .filter((r) => r.group_name === group && r.place === name)
             .reduce((inner, r) => inner + Number(r.bundle_count || 0), 0);
         }, 0);
-        return `<tr><th>${esc(place.code)}</th>${cells.join("")}<td>${fmt(total)}</td></tr>`;
+        const cells = statuses.map((status) => {
+          const count = place.keys.reduce((sum, [group, name]) => sum + bundleStatusCount(counts, group, name, status), 0);
+          return `<td class="${count ? "" : "zero"}">${fmt(count)}</td>`;
+        });
+        return `<tr><th>${esc(place.code)}</th><td>${fmt(total)}</td>${cells.join("")}</tr>`;
       }).join("");
       const total = counts.reduce((sum, r) => sum + Number(r.bundle_count || 0), 0);
       $("bundle-meta").innerHTML = `
