@@ -477,15 +477,20 @@
     .status-board-row {
       display: flex;
       align-items: flex-start;
+      width: 100%;
       margin: 0 0 1.15rem;
     }
-    .status-board-row .bundle-table-wrap { width: auto; margin: 0; }
-    .status-board-row .bundle-table { width: auto; }
+    .status-board-row > .bundle-table-wrap { flex: 1 1 auto; min-width: 0; margin: 0; }
+    .status-board-row .bundle-table { width: 100%; table-layout: fixed; }
+    .status-board-row .status-board th,
+    .status-board-row .status-board td { padding-left: 0.9rem; padding-right: 0.9rem; }
+    .status-board .status-extra { display: none; }
+    .status-board-row:has(.status-side[open]) .status-extra { display: table-cell; }
     .status-side {
       display: flex;
       align-items: flex-start;
+      flex: 0 0 1.7rem;
     }
-    .status-side > .bundle-table-wrap { order: 1; }
     .status-side > summary {
       order: 2;
       list-style: none;
@@ -2174,20 +2179,20 @@
         ...foldOrder,
         ...[...new Set(counts.map((r) => String(r.status || "")).filter((status) => status && !known.has(status)))].sort(),
       ];
-      const statusCells = (place, statuses) => statuses.map((status) => {
+      const statusCells = (place, statuses, extra) => statuses.map((status) => {
         const count = place.keys.reduce((sum, [group, name]) => sum + bundleStatusCount(counts, group, name, status), 0);
-        return `<td class="${count ? "" : "zero"}">${fmt(count)}</td>`;
+        const cls = [count ? "" : "zero", extra ? "status-extra" : ""].filter(Boolean).join(" ");
+        return `<td class="${cls}">${fmt(count)}</td>`;
       }).join("");
-      const mainBody = BUNDLE_STATUS_ROWS.map((place) => {
+      const body = BUNDLE_STATUS_ROWS.map((place) => {
         const total = place.keys.reduce((sum, [group, name]) => {
           return sum + counts
             .filter((r) => r.group_name === group && r.place === name)
             .reduce((inner, r) => inner + Number(r.bundle_count || 0), 0);
         }, 0);
-        return `<tr><th>${esc(place.code)}</th><td>${fmt(total)}</td>${statusCells(place, visible)}</tr>`;
+        return `<tr><th>${esc(place.code)}</th><td>${fmt(total)}</td>${statusCells(place, visible, false)}${statusCells(place, folded, true)}</tr>`;
       }).join("");
-      const extraHead = folded.map((status) => `<th>${esc(status)}</th>`).join("");
-      const extraBody = BUNDLE_STATUS_ROWS.map((place) => `<tr>${statusCells(place, folded)}</tr>`).join("");
+      const extraHead = folded.map((status) => `<th class="status-extra">${esc(status)}</th>`).join("");
       const total = counts.reduce((sum, r) => sum + Number(r.bundle_count || 0), 0);
       $("bundle-meta").innerHTML = `
         <span>ops day <strong>${esc(batch.subbatch_date)}</strong></span>
@@ -2200,18 +2205,12 @@
         <div class="status-board-row">
           <div class="bundle-table-wrap">
             <table class="bundle-table status-board">
-              <thead><tr><th></th><th>Total</th><th>Created</th><th>Shipped</th><th>Arrived</th></tr></thead>
-              <tbody>${mainBody}</tbody>
+              <thead><tr><th></th><th>Total</th><th>Created</th><th>Shipped</th><th>Arrived</th>${extraHead}</tr></thead>
+              <tbody>${body}</tbody>
             </table>
           </div>
           <details class="status-side">
             <summary title="Inbound, Draft, Cancelled"></summary>
-            <div class="bundle-table-wrap">
-              <table class="bundle-table status-board">
-                <thead><tr>${extraHead}</tr></thead>
-                <tbody>${extraBody}</tbody>
-              </table>
-            </div>
           </details>
         </div>
         <h2>EWR.H · one route</h2>
