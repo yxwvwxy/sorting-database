@@ -1888,6 +1888,10 @@
           const bwiBundles = gofoBundleByWarehouse.get("BWI.H") || 0;
           title = `BWI.H (8am-7pm outbound) - ${fmt(bwiTotal)} Bundle count: ${fmt(bwiBundles)}`;
         }
+        if (key === "ewr_one" || key === "ewr_multi") {
+          const sectionBundles = bundleCountFor(key, rows.map((r) => r.code));
+          title = `${title} Bundle count: ${fmt(sectionBundles)}`;
+        }
         const titleClass = key === "bwi" || key === "jfk_pwm" ? "city-module-title plain" : "city-module-title";
         const ewrBundles = gofoBundleByWarehouse.get("EWR.H") || 0;
         const ewrLine = key === "ewr_one"
@@ -2114,7 +2118,10 @@
       const hubParts = (places) => places.map((place) => ({ label: place, count: bundleCount(rows, "uni_hub", place) }));
       const groups = [
         [
-          { code: "EWR.H", total: bundleCount(rows, "ewr", "EWR.H"), parts: [] },
+          { code: "EWR.H", total: bundleCount(rows, "ewr", "EWR.H"), parts: [
+            { label: "one route", count: bundleCount(rows, "ewr_one", "EWR.H") },
+            { label: "multiple routes", count: bundleCount(rows, "ewr_multi", "EWR.H") },
+          ] },
           { code: "BWI.H", total: bundleCount(rows, "bwi", "BWI.H"), parts: [] },
         ],
         [
