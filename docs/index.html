@@ -459,6 +459,29 @@
       white-space: nowrap;
     }
     .bundle-table th { color: var(--muted); font-weight: 500; }
+    .chute-count-table { max-width: 22rem; margin-top: 0.4rem; }
+    .chute-count-table td { text-align: right; font-variant-numeric: tabular-nums; }
+    .chute-count-table tr.total th,
+    .chute-count-table tr.total td { color: var(--ink); font-weight: 600; }
+    .chute-count-table tr.chute-child { display: none; }
+    .chute-count-table tr.chute-child.open { display: table-row; }
+    .chute-count-table tr.chute-child th {
+      padding-left: 1.7rem;
+      color: var(--muted);
+      font-weight: 400;
+    }
+    button.chute-toggle {
+      background: transparent;
+      border: 0;
+      color: var(--mint);
+      font: inherit;
+      font-weight: 500;
+      padding: 0;
+      filter: none;
+    }
+    button.chute-toggle::before { content: "▸  "; color: var(--muted); font-weight: 400; }
+    button.chute-toggle[aria-expanded="true"]::before { content: "▾  "; }
+    button.chute-toggle:hover { filter: none; color: var(--ink); }
     .bundle-table.status-board th,
     .bundle-table.status-board td { text-align: left; }
     .bundle-table.status-board thead th { color: var(--ink); }
@@ -636,6 +659,8 @@
       <h2 style="margin-top:1.35rem">Growth chart</h2>
       <p id="gofo-chart-caption" class="caption">Showing JFK, PWM</p>
       <div class="panel"><div id="gofo-chart"></div></div>
+      <h2 style="margin-top:1.35rem">Chute count</h2>
+      <div id="gofo-chute-counts"></div>
     </section>
 
     <section id="bundle-section" class="section hidden">
@@ -2056,6 +2081,83 @@
       applyGofoChart();
     }
 
+    function chutePlaceCount(rows, section, place) {
+      return (rows || [])
+        .filter((row) => row.section === section && (place == null || row.place === place))
+        .reduce((sum, row) => sum + Number(row.chute_count || 0), 0);
+    }
+
+    function chuteSectionCount(rows, section, exceptPlace) {
+      return (rows || [])
+        .filter((row) => row.section === section && row.place !== exceptPlace)
+        .reduce((sum, row) => sum + Number(row.chute_count || 0), 0);
+    }
+
+    const CHUTE_COUNT_LAYOUT = [
+      { code: "ATL", total: (rows) => chutePlaceCount(rows, "uni_hub", "ATL") },
+      { code: "MIA", total: (rows) => chutePlaceCount(rows, "uni_hub", "MIA") },
+      { code: "ORD", total: (rows) => chutePlaceCount(rows, "uni_hub", "ORD") },
+      {
+        code: "DFW",
+        parts: ["DFW", "DEN", "IAH", "SLC"].map((place) => ({
+          label: place,
+          total: (rows) => chutePlaceCount(rows, "uni_hub", place),
+        })),
+      },
+      {
+        code: "LAX",
+        parts: ["LAX", "SJC", "SEA"].map((place) => ({
+          label: place,
+          total: (rows) => chutePlaceCount(rows, "uni_hub", place),
+        })),
+      },
+      { code: "JFK", total: (rows) => chuteSectionCount(rows, "jfk_pwm", "PWM") },
+      { code: "PWM", total: (rows) => chutePlaceCount(rows, "jfk_pwm", "PWM") },
+      {
+        code: "EWR.H",
+        parts: [
+          { label: "EWR.H 细分", total: (rows) => chuteSectionCount(rows, "ewr_one") },
+          { label: "EWR.H 粗分", total: (rows) => chuteSectionCount(rows, "ewr_multi") },
+        ],
+      },
+      { code: "BWI.H", total: (rows) => chuteSectionCount(rows, "bwi") },
+    ];
+
+    function renderGofoChuteCounts(rows) {
+      const host = $("gofo-chute-counts");
+      if (!host) return;
+      const open = new Set(
+        [...host.querySelectorAll(".chute-toggle[aria-expanded='true']")].map((button) => button.dataset.code)
+      );
+      const body = CHUTE_COUNT_LAYOUT.map((item) => {
+        const parts = (item.parts || []).map((part) => ({ label: part.label, count: part.total(rows) }));
+        const count = parts.length
+          ? parts.reduce((sum, part) => sum + part.count, 0)
+          : item.total(rows);
+        const expanded = open.has(item.code);
+        const label = parts.length
+          ? `<button type="button" class="chute-toggle" data-code="${esc(item.code)}" aria-expanded="${expanded ? "true" : "false"}">${esc(item.code)}</button>`
+          : esc(item.code);
+        const children = parts.map((part) => `
+          <tr class="chute-child${expanded ? " open" : ""}" data-parent="${esc(item.code)}">
+            <th>${esc(part.label)}</th><td>${fmt(part.count)}</td>
+          </tr>`).join("");
+        return `<tr><th>${label}</th><td>${fmt(count)}</td></tr>${children}`;
+      }).join("");
+      const total = CHUTE_COUNT_LAYOUT.reduce((sum, item) => {
+        if (item.parts) return sum + item.parts.reduce((inner, part) => inner + part.total(rows), 0);
+        return sum + item.total(rows);
+      }, 0);
+      host.innerHTML = `
+        <table class="bundle-table chute-count-table">
+          <thead><tr><th></th><th>Chutes</th></tr></thead>
+          <tbody>
+            ${body}
+            <tr class="total"><th>Total</th><td>${fmt(total)}</td></tr>
+          </tbody>
+        </table>`;
+    }
+
     async function loadGofoBatches() {
       const cutoff = etDaysAgoYmd(6);
       const all = await rpc("list_gofo_batches", { p_limit: 100 });
@@ -2074,12 +2176,14 @@
       const batch = gofoBatches[Number($("gofo-batch").value)];
       if (!batch || String(batch.subbatch_date || "") < GOFO_FIRST_OPS_DAY) return;
       renderMeta(batch, "gofo-meta");
-      let [series, mixed, bundleRows] = await Promise.all([
+      let [series, mixed, bundleRows, chuteRows] = await Promise.all([
         rpc("gofo_city_volume_series", { p_subbatch: batch.subbatch }),
         rpc("gofo_mixed_chutes", { p_subbatch: batch.subbatch }),
         rpc("gofo_bundle_counts", { p_operation_date: batch.subbatch_date }),
+        rpc("gofo_chute_counts", { p_operation_date: batch.subbatch_date }),
       ]);
       rememberBundleCounts(bundleRows);
+      renderGofoChuteCounts(chuteRows);
       series = series
         .filter((r) => r.city && r.section)
         .map((r) => ({ ...r, code: r.city, city: `${r.section}|${r.city}` }));
@@ -2282,6 +2386,15 @@
       onCityTileActivate(tile.dataset.city);
     });
     $("gofo-batch").addEventListener("change", () => loadGofoSeries().catch((e) => showError("gofo-error", e)));
+    $("gofo-chute-counts").addEventListener("click", (event) => {
+      const button = event.target.closest(".chute-toggle");
+      if (!button) return;
+      const expanded = button.getAttribute("aria-expanded") !== "true";
+      button.setAttribute("aria-expanded", expanded ? "true" : "false");
+      $("gofo-chute-counts").querySelectorAll(`tr[data-parent="${button.dataset.code}"]`).forEach((row) => {
+        row.classList.toggle("open", expanded);
+      });
+    });
     $("gofo-reload").addEventListener("click", () => {
       loadGofoBatches().then(loadGofoSeries).catch((e) => showError("gofo-error", e));
     });
@@ -2383,6 +2496,7 @@
         $("app-tabs").classList.add("hidden");
         $("tiles").innerHTML = "";
         $("gofo-tiles").innerHTML = "";
+        $("gofo-chute-counts").innerHTML = "";
         $("bundle-body").innerHTML = "";
         $("bundle-meta").innerHTML = "";
         $("upper-cards").innerHTML = "";
