@@ -630,7 +630,8 @@
       <div id="gofo-meta" class="meta"></div>
       <p id="gofo-error" class="error hidden"></p>
       <h2>Latest city totals</h2>
-      <p class="caption">JFK175 volume is under JFK/PWM (7pm outbound). Open Details on the JFK tile for each city and for a chute that holds more than one city. PWM is its own tile. Bundle count is bundles created in this ops day through the latest scrape.</p>
+      <p class="caption">JFK175 volume is under JFK/PWM (7pm outbound). Open Details on the JFK tile for each city and for a chute that holds more than one city. PWM is its own tile.</p>
+      <p class="caption">Bundle count follows the selected batch. A bundle is counted once if it was created during that ops day, through the batch's latest chute scrape. It still counts after it ships or arrives. Uni hub tiles follow the destination warehouse. EWR, BWI, JFK, and PWM follow the area.</p>
       <div id="gofo-tiles" class="city-modules"></div>
       <h2 style="margin-top:1.35rem">Growth chart</h2>
       <p id="gofo-chart-caption" class="caption">Showing JFK, PWM</p>
@@ -646,6 +647,7 @@
       </div>
       <div id="bundle-meta" class="meta"></div>
       <p id="bundle-error" class="error hidden"></p>
+      <p class="caption">Last 24 hours, by when the bundle was created, not by ops day. Each bundle is counted once at its latest status. Uni hub rows follow the destination warehouse. EWR one route and multiple routes follow the area.</p>
       <div id="bundle-body"></div>
     </section>
 
@@ -2210,7 +2212,6 @@
       `;
       const outliers = rows.filter((r) => r.row_kind === "outlier");
       $("bundle-body").innerHTML = `
-        <p class="caption">Bundles created in the last 24 hours. Each bundle is counted at its latest status.</p>
         <div class="status-board-row">
           <div class="bundle-table-wrap">
             <table class="bundle-table status-board">
