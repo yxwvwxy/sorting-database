@@ -1877,18 +1877,28 @@
     const gofoBundleByKey = new Map();
     const gofoBundleByCity = new Map();
     const gofoBundleByWarehouse = new Map();
+    const gofoBundleByHub = new Map();
     const BUNDLE_CITY_ALIAS = { BAY: "SJC", SMF: "SJC" };
+
+    function bundleHubCode(warehouse) {
+      return String(warehouse || "").replace(/[^A-Za-z]/g, "").slice(0, 3).toUpperCase();
+    }
 
     function rememberBundleCounts(rows) {
       gofoBundleByKey.clear();
       gofoBundleByCity.clear();
       gofoBundleByWarehouse.clear();
+      gofoBundleByHub.clear();
       for (const row of rows || []) {
         const count = Number(row.bundle_count || 0);
         const warehouse = String(row.warehouse || "");
         const city = BUNDLE_CITY_ALIAS[String(row.city || "")] || String(row.city || "");
+        const hub = bundleHubCode(warehouse);
         if (warehouse) {
           gofoBundleByWarehouse.set(warehouse, (gofoBundleByWarehouse.get(warehouse) || 0) + count);
+        }
+        if (hub) {
+          gofoBundleByHub.set(hub, (gofoBundleByHub.get(hub) || 0) + count);
         }
         if (!city) continue;
         if (warehouse) {
@@ -1909,6 +1919,10 @@
     function bundleCountFor(section, cities) {
       let total = 0;
       for (const city of cities) {
+        if (section === "uni_hub") {
+          total += gofoBundleByHub.get(city) || 0;
+          continue;
+        }
         const warehouse = bundleWarehouse(section, city);
         total += warehouse
           ? (gofoBundleByKey.get(`${warehouse}|${city}`) || 0)
