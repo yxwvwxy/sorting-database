@@ -92,8 +92,12 @@ def validate_supabase_settings(settings: Settings) -> None:
 
 # 19:10 ET is the last scrape of the current ops day.
 # 19:30 ET is the first scrape of the new ops day and must read the new Batch No.
+# 2026-10-22 only: last scrape is 18:10, and 18:30 opens the 10/23 batch.
 OPS_SWITCH_HOUR = 19
 OPS_SWITCH_MINUTE = 30
+EARLY_OPS_SWITCH_ON = date(2026, 10, 22)
+EARLY_OPS_SWITCH_HOUR = 18
+EARLY_OPS_SWITCH_MINUTE = 30
 
 
 @dataclass(frozen=True)
@@ -116,18 +120,32 @@ def _as_eastern(now: datetime | None = None) -> datetime:
     return current.astimezone(ET)
 
 
+def _ops_switch_clock(current: datetime) -> tuple[int, int]:
+    """Hour and minute when this evening's new ops day opens."""
+    if current.date() == EARLY_OPS_SWITCH_ON:
+        return EARLY_OPS_SWITCH_HOUR, EARLY_OPS_SWITCH_MINUTE
+    return OPS_SWITCH_HOUR, OPS_SWITCH_MINUTE
+
+
 def new_ops_window_started(now: datetime | None = None) -> bool:
-    """True from 19:30 ET until the next day's 19:30."""
+    """True from the evening switch until the next day's switch.
+
+    Normally 19:30 ET. On 2026-10-22 the window opens at 18:30.
+    """
     current = _as_eastern(now)
-    return current.hour > OPS_SWITCH_HOUR or (
-        current.hour == OPS_SWITCH_HOUR and current.minute >= OPS_SWITCH_MINUTE
-    )
+    hour, minute = _ops_switch_clock(current)
+    return current.hour > hour or (current.hour == hour and current.minute >= minute)
 
 
 def is_closing_scrape_slot(now: datetime | None = None) -> bool:
-    """True for 19:00–19:29 ET. The 19:10 scrape stays on the current batch."""
+    """True for the :10 before the switch. That scrape stays on the current batch.
+
+    Normally 19:00–19:29 ET. On 2026-10-22 it is 18:00–18:29, so 18:10 stays
+    on ops day 10/22 and 18:30 may open the new batch.
+    """
     current = _as_eastern(now)
-    return current.hour == OPS_SWITCH_HOUR and current.minute < OPS_SWITCH_MINUTE
+    hour, minute = _ops_switch_clock(current)
+    return current.hour == hour and current.minute < minute
 
 
 def operation_date_et(now: datetime | None = None) -> date:

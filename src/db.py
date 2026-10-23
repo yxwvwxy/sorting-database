@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -200,3 +200,114 @@ def save_city_initials(
         .upsert(payload, on_conflict="subbatch_id,city")
         .execute()
     )
+
+
+_BUNDLE_COMPARE = (
+    "subbatch_id",
+    "operation_date",
+    "bundle_type",
+    "carrier_id",
+    "dest_transit_whs",
+    "seal_id",
+    "area",
+    "shpt",
+    "current_whs",
+    "generated_time",
+    "status",
+    "notes",
+    "operator",
+    "operator_id",
+)
+
+
+def _bundle_instant(value: Any) -> str:
+    if value is None or value == "":
+        return ""
+    if isinstance(value, datetime):
+        parsed = value
+    else:
+        parsed = _parse_db_timestamp(str(value))
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def _bundle_same(existing: dict[str, Any], row: dict[str, Any]) -> bool:
+    for key in _BUNDLE_COMPARE:
+        left = existing.get(key)
+        right = row.get(key)
+        if key == "generated_time":
+            if _bundle_instant(left) != _bundle_instant(right):
+                return False
+            continue
+        if (None if left is None else str(left)) != (None if right is None else str(right)):
+            return False
+    return True
+
+
+def fetch_subbatch_id(client: Client, operation_date: date) -> str | None:
+    """Batch already stored for an operation date, if this day has been scraped."""
+    response = (
+        client.table("subbatch")
+        .select("subbatch")
+        .eq("subbatch_date", operation_date.isoformat())
+        .order("scraped_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    rows = response.data or []
+    if not rows:
+        return None
+    value = str(rows[0].get("subbatch") or "").strip()
+    return value or None
+
+
+def save_bundle_rows(
+    client: Client,
+    rows: list[dict[str, Any]],
+    *,
+    scraped_at: datetime,
+) -> dict[str, int]:
+    """Insert a row for each bundle id and status.
+
+    The same bundle id with a new status is another row: that sequence is
+    the bundle's trajectory. Repeating a status leaves the existing row,
+    including first_seen_at, unless another field changed.
+    """
+    stamp = _as_utc_iso(scraped_at)
+    existing: dict[tuple[str, str], dict[str, Any]] = {}
+    ids = [row["bundle_id"] for row in rows]
+    for start in range(0, len(ids), 200):
+        chunk = ids[start : start + 200]
+        response = (
+            client.table("bundle_snapshot")
+            .select(",".join(("bundle_id", "first_seen_at", *_BUNDLE_COMPARE)))
+            .in_("bundle_id", chunk)
+            .execute()
+        )
+        for item in response.data or []:
+            existing[(str(item["bundle_id"]), str(item.get("status") or ""))] = item
+
+    inserts: list[dict[str, Any]] = []
+    updates: list[dict[str, Any]] = []
+    for row in rows:
+        payload = dict(row)
+        payload["scraped_at"] = stamp
+        prior = existing.get((str(row["bundle_id"]), str(row.get("status") or "")))
+        if prior is None:
+            payload["first_seen_at"] = stamp
+            inserts.append(payload)
+        elif not _bundle_same(prior, row):
+            updates.append(payload)
+
+    for start in range(0, len(inserts), 200):
+        client.table("bundle_snapshot").insert(inserts[start : start + 200]).execute()
+    for start in range(0, len(updates), 200):
+        client.table("bundle_snapshot").upsert(
+            updates[start : start + 200], on_conflict="bundle_id,status"
+        ).execute()
+    return {
+        "inserted": len(inserts),
+        "updated": len(updates),
+        "unchanged": len(rows) - len(inserts) - len(updates),
+    }

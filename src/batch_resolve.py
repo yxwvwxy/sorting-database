@@ -3,7 +3,9 @@
 Agreed ops rules (America/New_York):
 
 - 19:10 (19:00-19:29): never open Slot Assignment; use the saved batch.
+  On 2026-10-22 that closing slot is 18:10 (18:00-18:29).
 - From 19:30 until Slot Batch No changes from the pre-switch value:
+  On 2026-10-22 this starts at 18:30.
   every run opens Slot Assignment.
   - still old -> scrape with the old batch; check again next run
   - changed -> page value becomes this ops-day batch; no more Slot checks

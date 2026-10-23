@@ -15,6 +15,8 @@ if not exist ".venv\Scripts\python.exe" (
 if not exist "logs" mkdir logs
 
 for /f %%i in ('powershell -NoProfile -Command "Get-Date -Format yyyyMMdd"') do set DAY=%%i
+for /f %%i in ('powershell -NoProfile -Command "Get-Date -Format yyyy-MM-ddTHH:mm"') do set SLOT=%%i
+for /f %%i in ('powershell -NoProfile -Command "Get-Date -Format mm"') do set SLOT_MIN=%%i
 set LOG=logs\scrape-%DAY%.log
 set LOCK=logs\scrape.lock
 
@@ -32,29 +34,25 @@ if exist "%LOCK%" (
 
 echo %DATE% %TIME%> "%LOCK%"
 
-call :run_with_retry %* >> "%LOG%" 2>&1
+REM No labels: cmd.exe misses :labels when this file is saved with LF endings.
+echo ===== %DATE% %TIME% start =====>> "%LOG%"
+".venv\Scripts\python.exe" -m src.main --chutes-only %* >> "%LOG%" 2>&1
 set ERR=%ERRORLEVEL%
+if not %ERR%==0 echo Run attempt 1/2 failed ^(exit %ERR%^).>> "%LOG%"
+if not %ERR%==0 echo Whole-run retry 2/2 after failure ^(fresh browser in 25s^)...>> "%LOG%"
+if not %ERR%==0 powershell -NoProfile -Command "Start-Sleep -Seconds 25"
+if not %ERR%==0 ".venv\Scripts\python.exe" -m src.main --chutes-only %* >> "%LOG%" 2>&1
+if not %ERR%==0 set ERR=%ERRORLEVEL%
+echo ===== %DATE% %TIME% done ^(exit %ERR%^) =====>> "%LOG%"
+
 del "%LOCK%" >nul 2>&1
-exit /b %ERR%
 
-:run_with_retry
-echo ===== %DATE% %TIME% start =====
-set ATTEMPT=1
-set ERR=1
-
-:retry_loop
-if %ATTEMPT% GTR 1 (
-  echo Whole-run retry %ATTEMPT%/2 after failure ^(fresh browser in 25s^)...
-  powershell -NoProfile -Command "Start-Sleep -Seconds 25"
+REM Bundle export follows a finished :10 chute run in its own process.
+REM A chute failure still reaches this point. A bundle failure does not change ERR.
+if %SLOT_MIN% GEQ 10 if %SLOT_MIN% LSS 30 (
+  echo [%DATE% %TIME%] Bundle export after chute exit %ERR% slot %SLOT% >> "%LOG%"
+  ".venv\Scripts\python.exe" -m src.bundle_export --slot %SLOT% >> "logs\bundle-%DAY%.log" 2>&1
+  echo [%DATE% %TIME%] Bundle export exit %ERRORLEVEL% >> "%LOG%"
 )
-".venv\Scripts\python.exe" -m src.main --chutes-only %*
-set ERR=%ERRORLEVEL%
-if %ERR% EQU 0 goto retry_done
-echo Run attempt %ATTEMPT%/2 failed ^(exit %ERR%^).
-if %ATTEMPT% GEQ 2 goto retry_done
-set /a ATTEMPT+=1
-goto retry_loop
 
-:retry_done
-echo ===== %DATE% %TIME% done ^(exit %ERR%^) =====
 exit /b %ERR%
