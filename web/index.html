@@ -491,6 +491,14 @@
       font-weight: 500;
     }
     .bundle-table.status-board td.zero { color: var(--muted); }
+    .bundle-table.pull-board thead th { color: var(--ink); }
+    .bundle-table.pull-board tbody th {
+      text-align: left;
+      color: var(--mint);
+      font-weight: 500;
+    }
+    .bundle-table.pull-board td.zero,
+    .bundle-table.pull-board td.skip { color: var(--muted); }
     .bundle-fold { margin: -0.4rem 0 1.15rem; }
     .bundle-fold summary,
     .bundle-band > summary {
@@ -2294,7 +2302,67 @@
         .reduce((sum, r) => sum + Number(r.bundle_count || 0), 0);
     }
 
-    function renderBundle(rows) {
+    function pullDayLabel(ymd) {
+      const weekday = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+      const [y, m, d] = String(ymd).split("-").map(Number);
+      const dow = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+      return `${weekday[dow]} ${m}/${d}`;
+    }
+
+    function pullDaySpan(start, end) {
+      const days = [];
+      let cur = String(start).slice(0, 10);
+      const last = String(end).slice(0, 10);
+      while (cur <= last) {
+        days.push(cur);
+        const [y, m, d] = cur.split("-").map(Number);
+        cur = new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
+      }
+      return days;
+    }
+
+    function renderPullList(rows) {
+      const meta = (rows && rows[0]) || null;
+      if (!meta || !meta.pull_date) return "";
+      if (!meta.is_pull_day) {
+        return `
+          <h2>需要拉出</h2>
+          <p class="caption">今天不是拉出日。下次是${pullDayLabel(meta.pull_date)}。</p>`;
+      }
+      const pulls = rows
+        .filter((row) => row.chute_id != null)
+        .sort((a, b) => Number(a.chute_id) - Number(b.chute_id));
+      const days = pullDaySpan(meta.window_start, meta.window_end);
+      const span = `${pullDayLabel(days[0]).split(" ")[1]}–${pullDayLabel(days[days.length - 1]).split(" ")[1]}`;
+      const line = Number(meta.two_day_line || 0);
+      if (!pulls.length) {
+        return `
+          <h2>需要拉出</h2>
+          <p class="caption">${pullDayLabel(meta.pull_date)} 拉出 · ${span}。这天没有需要拉出的隔口。</p>`;
+      }
+      const head = days.map((day) => `<th>${pullDayLabel(day).split(" ")[1]}</th>`).join("");
+      const body = pulls.map((row) => {
+        const byDate = new Map((row.day_volumes || []).map((day) => [String(day.date).slice(0, 10), day]));
+        const cells = days.map((day) => {
+          const cell = byDate.get(day);
+          if (!cell || !cell.counted) return `<td class="skip">—</td>`;
+          const count = Number(cell.volume || 0);
+          return `<td class="${count ? "" : "zero"}">${fmt(count)}</td>`;
+        }).join("");
+        return `<tr><th>${row.chute_id}</th><td>${esc(row.route)}</td>${cells}<td>${fmt(row.total)}</td><td>${fmt(row.line)}</td></tr>`;
+      }).join("");
+      return `
+        <h2>需要拉出</h2>
+        <p class="caption">${pullDayLabel(meta.pull_date)} 拉出 · ${span} · ${fmt(pulls.length)} 个隔口。EWR.H 细分。三天不到 200 就拉。换过设置的隔口已经集过包，只算换之后的量，满两天但不到 ${fmt(line)} 的也拉。${fmt(line)} 按过去一周算：两天合计到这个数，下一天大约九成会满。</p>
+        <div class="bundle-table-wrap">
+          <table class="bundle-table pull-board">
+            <thead><tr><th>隔口</th><th>路线</th>${head}<th>合计</th><th>标准</th></tr></thead>
+            <tbody>${body}</tbody>
+          </table>
+        </div>`;
+    }
+
+    function renderBundle(rows, pulls) {
       const counts = rows.filter((r) => r.row_kind === "count" && ["uni_hub", "jfk", "pwm", "ewr", "bwi"].includes(r.group_name));
       const visible = ["Created", "Shipped", "Arrived"];
       const foldOrder = ["Inbound", "Draft", "Cancelled"];
@@ -2335,6 +2403,7 @@
             <summary title="Inbound, Draft, Cancelled"></summary>
           </details>
         </div>
+        ${renderPullList(pulls)}
         <h2>EWR.H · one route</h2>
         ${shipmentBlocks(outliers.filter((r) => r.group_name === "ewr_one"), "ewr-one")}
         <h2>Other</h2>
@@ -2344,8 +2413,11 @@
 
     async function loadBundleBoard() {
       showError("bundle-error", null);
-      const rows = await rpc("bundle_board", { p_operation_date: etDaysAgoYmd(0) });
-      renderBundle(rows || []);
+      const [rows, pulls] = await Promise.all([
+        rpc("bundle_board", { p_operation_date: etDaysAgoYmd(0) }),
+        rpc("barrel_pull_list"),
+      ]);
+      renderBundle(rows || [], pulls || []);
     }
 
     async function bootApp() {
