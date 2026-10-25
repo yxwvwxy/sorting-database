@@ -2330,7 +2330,7 @@
       const pulls = rows
         .filter((row) => row.chute_id != null)
         .sort((a, b) => Number(a.chute_id) - Number(b.chute_id));
-      const days = pullDaySpan(meta.window_start, meta.window_end);
+      const days = pullDaySpan(meta.window_start, meta.window_end).reverse();
       if (!pulls.length) {
         return `
           <h2>Pull</h2>
