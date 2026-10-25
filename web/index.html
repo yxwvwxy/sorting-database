@@ -497,6 +497,18 @@
       color: var(--muted);
       font-size: 0.85rem;
     }
+    .bundle-band { margin: 0 0 1rem; }
+    .bundle-band > summary {
+      cursor: pointer;
+      list-style: none;
+      margin: 0 0 0.55rem;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+    .bundle-band > summary::-webkit-details-marker { display: none; }
+    .bundle-band > summary::before { content: "▸  "; }
+    .bundle-band[open] > summary { margin-bottom: 0.55rem; }
+    .bundle-band[open] > summary::before { content: "▾  "; }
     .status-board-row {
       display: flex;
       align-items: flex-start;
@@ -2258,26 +2270,31 @@
         </div>`;
     }
 
-    function shipmentBand(title, rows) {
+    const collapsedBundleBands = new Set();
+
+    function shipmentBand(title, rows, key) {
       const created = rows.filter((r) => String(r.status || "").toLowerCase() === "created");
       const other = rows.filter((r) => String(r.status || "").toLowerCase() !== "created");
       const folded = other.length
         ? `<details class="bundle-fold"><summary>Other statuses · ${fmt(other.length)}</summary>${bundleTable(other)}</details>`
         : "";
+      const open = collapsedBundleBands.has(key) ? "" : "open";
       return `
-        <p class="city-module-title plain">${title} · ${fmt(created.length)}</p>
-        ${bundleTable(created)}
-        ${folded}`;
+        <details class="bundle-band" data-band="${esc(key)}" ${open}>
+          <summary>${title} · ${fmt(created.length)}</summary>
+          ${bundleTable(created)}
+          ${folded}
+        </details>`;
     }
 
-    function shipmentBlocks(rows) {
+    function shipmentBlocks(rows, prefix) {
       const low = rows
         .filter((r) => Number(r.shipment_count) < 100)
         .sort((a, b) => Number(a.shipment_count) - Number(b.shipment_count) || String(a.bundle_id).localeCompare(String(b.bundle_id)));
       const high = rows
         .filter((r) => Number(r.shipment_count) > 300)
         .sort((a, b) => Number(b.shipment_count) - Number(a.shipment_count) || String(a.bundle_id).localeCompare(String(b.bundle_id)));
-      return `${shipmentBand("shipment &lt; 100", low)}${shipmentBand("shipment &gt; 300", high)}`;
+      return `${shipmentBand("shipment &lt; 100", low, prefix + "-low")}${shipmentBand("shipment &gt; 300", high, prefix + "-high")}`;
     }
 
     function bundleStatusCount(rows, group, place, status) {
@@ -2328,9 +2345,9 @@
           </details>
         </div>
         <h2>EWR.H · one route</h2>
-        ${shipmentBlocks(outliers.filter((r) => r.group_name === "ewr_one"))}
+        ${shipmentBlocks(outliers.filter((r) => r.group_name === "ewr_one"), "ewr-one")}
         <h2>Other</h2>
-        ${shipmentBlocks(outliers.filter((r) => r.group_name !== "ewr_one"))}
+        ${shipmentBlocks(outliers.filter((r) => r.group_name !== "ewr_one"), "other")}
       `;
     }
 
@@ -2401,6 +2418,12 @@
     $("bundle-reload").addEventListener("click", () => {
       loadBundleBoard().catch((e) => showError("bundle-error", e));
     });
+    $("bundle-section").addEventListener("toggle", (event) => {
+      const band = event.target;
+      if (!(band instanceof HTMLDetailsElement) || !band.classList.contains("bundle-band")) return;
+      if (band.open) collapsedBundleBands.delete(band.dataset.band);
+      else collapsedBundleBands.add(band.dataset.band);
+    }, true);
     setInterval(() => {
       if ($("app-tabs").classList.contains("hidden")) return;
       if (!visibleTabs().includes("bundle")) return;
