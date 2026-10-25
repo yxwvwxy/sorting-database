@@ -2347,15 +2347,17 @@
         }).join("");
         return `<tr><th>${row.chute_id}</th><td>${esc(row.route)}</td><td>${fmt(row.total)}</td>${cells}</tr>`;
       }).join("");
+      const open = collapsedBundleBands.has("pull") ? "" : "open";
       return `
-        <h2>Pull</h2>
-        <p class="caption">EWR.H one route · ${fmt(pulls.length)}</p>
-        <div class="bundle-table-wrap">
-          <table class="bundle-table pull-board">
-            <thead><tr><th>Chute</th><th>Route</th><th>Total</th>${head}</tr></thead>
-            <tbody>${body}</tbody>
-          </table>
-        </div>`;
+        <details class="bundle-band" data-band="pull" ${open}>
+          <summary>EWR.H one route · ${fmt(pulls.length)}</summary>
+          <div class="bundle-table-wrap">
+            <table class="bundle-table pull-board">
+              <thead><tr><th>Chute</th><th>Route</th><th>Total</th>${head}</tr></thead>
+              <tbody>${body}</tbody>
+            </table>
+          </div>
+        </details>`;
     }
 
     function renderBundle(rows, pulls) {
