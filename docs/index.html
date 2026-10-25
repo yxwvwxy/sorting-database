@@ -2302,11 +2302,9 @@
         .reduce((sum, r) => sum + Number(r.bundle_count || 0), 0);
     }
 
-    function pullDayLabel(ymd) {
-      const weekday = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
-      const [y, m, d] = String(ymd).split("-").map(Number);
-      const dow = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
-      return `${weekday[dow]} ${m}/${d}`;
+    function pullMonthDay(ymd) {
+      const [, m, d] = String(ymd).slice(0, 10).split("-").map(Number);
+      return `${m}/${d}`;
     }
 
     function pullDaySpan(start, end) {
@@ -2326,21 +2324,19 @@
       if (!meta || !meta.pull_date) return "";
       if (!meta.is_pull_day) {
         return `
-          <h2>需要拉出</h2>
-          <p class="caption">今天不是拉出日。下次是${pullDayLabel(meta.pull_date)}。</p>`;
+          <h2>Pull</h2>
+          <p class="caption">Not a pull day.</p>`;
       }
       const pulls = rows
         .filter((row) => row.chute_id != null)
         .sort((a, b) => Number(a.chute_id) - Number(b.chute_id));
       const days = pullDaySpan(meta.window_start, meta.window_end);
-      const span = `${pullDayLabel(days[0]).split(" ")[1]}–${pullDayLabel(days[days.length - 1]).split(" ")[1]}`;
-      const line = Number(meta.two_day_line || 0);
       if (!pulls.length) {
         return `
-          <h2>需要拉出</h2>
-          <p class="caption">${pullDayLabel(meta.pull_date)} 拉出 · ${span}。这天没有需要拉出的隔口。</p>`;
+          <h2>Pull</h2>
+          <p class="caption">EWR.H one route. No chutes to pull.</p>`;
       }
-      const head = days.map((day) => `<th>${pullDayLabel(day).split(" ")[1]}</th>`).join("");
+      const head = days.map((day) => `<th>${pullMonthDay(day)}</th>`).join("");
       const body = pulls.map((row) => {
         const byDate = new Map((row.day_volumes || []).map((day) => [String(day.date).slice(0, 10), day]));
         const cells = days.map((day) => {
@@ -2349,14 +2345,14 @@
           const count = Number(cell.volume || 0);
           return `<td class="${count ? "" : "zero"}">${fmt(count)}</td>`;
         }).join("");
-        return `<tr><th>${row.chute_id}</th><td>${esc(row.route)}</td>${cells}<td>${fmt(row.total)}</td><td>${fmt(row.line)}</td></tr>`;
+        return `<tr><th>${row.chute_id}</th><td>${esc(row.route)}</td><td>${fmt(row.total)}</td>${cells}</tr>`;
       }).join("");
       return `
-        <h2>需要拉出</h2>
-        <p class="caption">${pullDayLabel(meta.pull_date)} 拉出 · ${span} · ${fmt(pulls.length)} 个隔口。EWR.H 细分。三天不到 200 就拉。换过设置的隔口已经集过包，只算换之后的量，满两天但不到 ${fmt(line)} 的也拉。${fmt(line)} 按过去一周算：两天合计到这个数，下一天大约九成会满。</p>
+        <h2>Pull</h2>
+        <p class="caption">EWR.H one route · ${fmt(pulls.length)}</p>
         <div class="bundle-table-wrap">
           <table class="bundle-table pull-board">
-            <thead><tr><th>隔口</th><th>路线</th>${head}<th>合计</th><th>标准</th></tr></thead>
+            <thead><tr><th>Chute</th><th>Route</th><th>Total</th>${head}</tr></thead>
             <tbody>${body}</tbody>
           </table>
         </div>`;
