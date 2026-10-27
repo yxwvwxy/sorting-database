@@ -2346,7 +2346,7 @@
           const count = Number(cell.volume || 0);
           return `<td class="${count ? "" : "zero"}">${fmt(count)}</td>`;
         }).join("");
-        return `<tr><th>${row.chute_id}</th><td>${esc(row.route)}</td><td>${fmt(row.total)}</td>${cells}</tr>`;
+        return `<tr><th>${row.chute_id}</th><td>${fmt(row.total)}</td><td>${esc(row.route)}</td>${cells}</tr>`;
       }).join("");
       const open = collapsedBundleBands.has("pull") ? "" : "open";
       return `
@@ -2355,7 +2355,7 @@
           <summary>EWR.H one route · ${fmt(pulls.length)}</summary>
           <div class="bundle-table-wrap">
             <table class="bundle-table pull-board">
-              <thead><tr><th>Chute</th><th>Route</th><th>Total</th>${head}</tr></thead>
+              <thead><tr><th>Chute</th><th>Total</th><th>Route</th>${head}</tr></thead>
               <tbody>${body}</tbody>
             </table>
           </div>
