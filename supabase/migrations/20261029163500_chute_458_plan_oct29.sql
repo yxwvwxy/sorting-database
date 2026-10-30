@@ -476,7 +476,7 @@ FROM (
         (666, 'transit', 'EWR.H', DATE '2026-10-29', '185192.22-EWR.H-FRG01-67-G', 'by_route'),
         (667, 'transit', 'EWR.H', DATE '2026-10-29', '185183.22-EWR.H-FRG01-58-G', 'by_route'),
         (668, 'transit', 'ATL441', DATE '2026-10-29', NULL, 'uni_hub'),
-        (669, 'transit', 'EWR.H', DATE '2026-10-29', '185191.22-EWR.H-FRG01-66-U', 'by_route'),
+        (669, 'transit', 'JFK175', DATE '2026-10-29', '185191.22-EWR.H-FRG01-66-U', 'by_route'),
         (670, 'transit', 'ORD184', DATE '2026-10-29', NULL, 'uni_hub'),
         (701, 'transit', 'EWR.H', DATE '2026-10-29', '185152.22-EWR.H-BOS01-045-G', 'by_route'),
         (702, 'transit', 'EWR.H', DATE '2026-10-29', '185151.22-EWR.H-BOS01-044-G', 'by_route'),

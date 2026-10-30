@@ -2321,7 +2321,7 @@
       if (!pulls.length) {
         return `
           <h2>Pull</h2>
-          <p class="caption">${label ? `Ops day ${label}. ` : ""}Closing volume &lt; 200. None.</p>`;
+          <p class="caption">${label ? `Ops day ${label}. ` : ""}Configured chutes with volume 1–199. None.</p>`;
       }
       pulls.sort((a, b) => {
         const [ap, ai] = physicalChuteKey(a.chute_id);
@@ -2331,13 +2331,13 @@
       const body = pulls.map((row) => `
         <tr>
           <th>${esc(row.chute_id)}</th>
-          <td class="${Number(row.volume) ? "" : "zero"}">${fmt(row.volume)}</td>
+          <td>${fmt(row.volume)}</td>
         </tr>`).join("");
       const open = collapsedBundleBands.has("pull") ? "" : "open";
       return `
         <h2>Pull</h2>
         <details class="bundle-band" data-band="pull" ${open}>
-          <summary>Ops day ${esc(label)} · volume &lt; 200 · ${fmt(pulls.length)}</summary>
+          <summary>Ops day ${esc(label)} · volume 1–199 · ${fmt(pulls.length)}</summary>
           <div class="bundle-table-wrap">
             <table class="bundle-table pull-board">
               <thead><tr><th>Chute</th><th>Volume</th></tr></thead>
