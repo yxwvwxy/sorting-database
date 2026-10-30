@@ -2308,54 +2308,39 @@
       return `${m}/${d}`;
     }
 
-    function pullDaySpan(start, end) {
-      const days = [];
-      let cur = String(start).slice(0, 10);
-      const last = String(end).slice(0, 10);
-      while (cur <= last) {
-        days.push(cur);
-        const [y, m, d] = cur.split("-").map(Number);
-        cur = new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
-      }
-      return days;
+    function physicalChuteKey(chuteId) {
+      const id = Number(chuteId);
+      if (id >= 10000 && id % 100 === 1) return [Math.floor(id / 100), id];
+      return [id, id];
     }
 
     function renderPullList(rows) {
-      const meta = (rows && rows[0]) || null;
-      if (!meta || !meta.pull_date) return "";
-      if (!meta.is_pull_day) {
-        return `
-          <h2>Pull</h2>
-          <p class="caption">Not a pull day.</p>`;
-      }
-      const pulls = rows
-        .filter((row) => row.chute_id != null)
-        .sort((a, b) => Number(a.chute_id) - Number(b.chute_id));
-      const days = pullDaySpan(meta.window_start, meta.window_end).reverse();
+      const pulls = (rows || []).filter((row) => row.chute_id != null);
+      const opsDate = pulls[0]?.ops_date || (rows && rows[0] && rows[0].ops_date) || null;
+      const label = opsDate ? pullMonthDay(opsDate) : "";
       if (!pulls.length) {
         return `
           <h2>Pull</h2>
-          <p class="caption">EWR.H one route. No chutes to pull.</p>`;
+          <p class="caption">${label ? `Ops day ${label}. ` : ""}Closing volume &lt; 200. None.</p>`;
       }
-      const head = days.map((day) => `<th>${pullMonthDay(day)}</th>`).join("");
-      const body = pulls.map((row) => {
-        const byDate = new Map((row.day_volumes || []).map((day) => [String(day.date).slice(0, 10), day]));
-        const cells = days.map((day) => {
-          const cell = byDate.get(day);
-          if (!cell || !cell.counted) return `<td class="skip">—</td>`;
-          const count = Number(cell.volume || 0);
-          return `<td class="${count ? "" : "zero"}">${fmt(count)}</td>`;
-        }).join("");
-        return `<tr><th>${row.chute_id}</th><td>${fmt(row.total)}</td><td>${esc(row.route)}</td>${cells}</tr>`;
-      }).join("");
+      pulls.sort((a, b) => {
+        const [ap, ai] = physicalChuteKey(a.chute_id);
+        const [bp, bi] = physicalChuteKey(b.chute_id);
+        return ap - bp || ai - bi;
+      });
+      const body = pulls.map((row) => `
+        <tr>
+          <th>${esc(row.chute_id)}</th>
+          <td class="${Number(row.volume) ? "" : "zero"}">${fmt(row.volume)}</td>
+        </tr>`).join("");
       const open = collapsedBundleBands.has("pull") ? "" : "open";
       return `
         <h2>Pull</h2>
         <details class="bundle-band" data-band="pull" ${open}>
-          <summary>EWR.H one route · ${fmt(pulls.length)}</summary>
+          <summary>Ops day ${esc(label)} · volume &lt; 200 · ${fmt(pulls.length)}</summary>
           <div class="bundle-table-wrap">
             <table class="bundle-table pull-board">
-              <thead><tr><th>Chute</th><th>Total</th><th>Route</th>${head}</tr></thead>
+              <thead><tr><th>Chute</th><th>Volume</th></tr></thead>
               <tbody>${body}</tbody>
             </table>
           </div>
@@ -2390,7 +2375,6 @@
         <span>last <strong>24 hours</strong></span>
         <span>bundles <strong>${fmt(total)}</strong></span>
       `;
-      const outliers = rows.filter((r) => r.row_kind === "outlier");
       $("bundle-body").innerHTML = `
         <div class="status-board-row">
           <div class="bundle-table-wrap">
@@ -2404,10 +2388,6 @@
           </details>
         </div>
         ${renderPullList(pulls)}
-        <h2>EWR.H · one route</h2>
-        ${shipmentBlocks(outliers.filter((r) => r.group_name === "ewr_one"), "ewr-one")}
-        <h2>Other</h2>
-        ${shipmentBlocks(outliers.filter((r) => r.group_name !== "ewr_one"), "other")}
       `;
     }
 
