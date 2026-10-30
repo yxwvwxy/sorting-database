@@ -620,6 +620,7 @@ def _complete_chute_grid(chutes: list[ChuteRow]) -> list[ChuteRow]:
 
     Blocked slots such as 352 and 952 are not rendered, so a page read is 398.
     The grid fill makes each snapshot 400 slots without using chute_destination.
+    5/6-digit irregular chutes from the side table are kept as extras.
     """
     by_id: dict[int, int] = {}
     for row in chutes:
@@ -645,6 +646,7 @@ def _complete_chute_grid(chutes: list[ChuteRow]) -> list[ChuteRow]:
 
 
 def _parse_chutes(target: Page | Frame) -> list[ChuteRow]:
+    """Read the 400-slot heat map (3/4-digit physical ids only)."""
     raw = target.evaluate(
         """() => {
           const modern = [];
@@ -668,6 +670,174 @@ def _parse_chutes(target: Page | Frame) -> list[ChuteRow]:
     if not chutes:
         raise RuntimeError("No chute data found on page.")
     return chutes
+
+
+def parse_irregular_chute_text(page_text: str) -> list[ChuteRow]:
+    """Parse the Irregular chutes table from Sorting Production Analysis body text.
+
+    The section looks like:
+      Irregular chutes — 1,146 pcs
+      Chute  Parcels
+      10101  23
+      ...
+    Each 5/6-digit id is a left/right split with its own cumulative batch volume.
+    """
+    lines = [line.strip() for line in page_text.splitlines() if line.strip()]
+    start = next(
+        (
+            idx
+            for idx, line in enumerate(lines)
+            if re.search(r"irregular\s+chutes", line, re.I)
+        ),
+        None,
+    )
+    if start is None:
+        return []
+
+    rows: list[ChuteRow] = []
+    seen: set[int] = set()
+    for line in lines[start + 1 :]:
+        if re.search(r"irregular\s+chutes", line, re.I):
+            break
+        if re.fullmatch(r"chute|parcels|chute\s+parcels", line, re.I):
+            continue
+        # Stop when we leave the numeric table for another section heading.
+        if not re.match(r"^\d", line) and rows:
+            break
+        match = re.fullmatch(r"(\d{5,6})\s+(\d+)\s*", line)
+        if match:
+            chute_id = int(match.group(1))
+            volume = int(match.group(2))
+            if chute_id not in seen:
+                seen.add(chute_id)
+                rows.append(ChuteRow(chute_id=chute_id, volume=volume))
+            continue
+        # Streamlit sometimes splits cells across lines: chute then parcels.
+        if re.fullmatch(r"\d{5,6}", line):
+            # Resolved in the adjacent-line pass below when same-line parse fails.
+            continue
+        if rows and not re.match(r"^\d", line):
+            break
+
+    if rows:
+        return rows
+
+    pending: int | None = None
+    for line in lines[start + 1 :]:
+        if re.search(r"irregular\s+chutes", line, re.I):
+            break
+        if re.fullmatch(r"chute|parcels|chute\s+parcels", line, re.I):
+            continue
+        if pending is None and re.fullmatch(r"\d{5,6}", line):
+            pending = int(line)
+            continue
+        if pending is not None and re.fullmatch(r"\d+", line):
+            if pending not in seen:
+                seen.add(pending)
+                rows.append(ChuteRow(chute_id=pending, volume=int(line)))
+            pending = None
+            continue
+        if rows and not re.match(r"^\d", line):
+            break
+        pending = None
+    return rows
+
+
+def _parse_irregular_chutes(target: Page | Frame) -> list[ChuteRow]:
+    """Read 5/6-digit split volumes from the Irregular chutes table on the page."""
+    raw = target.evaluate(
+        """() => {
+          const out = [];
+          const seen = new Set();
+          const push = (chute_id, volume) => {
+            if (!Number.isFinite(chute_id) || !Number.isFinite(volume)) return;
+            if (chute_id < 10000) return;
+            if (seen.has(chute_id)) return;
+            seen.add(chute_id);
+            out.push({ chute_id, volume });
+          };
+
+          const looksIrregular = (node) => {
+            let cur = node;
+            for (let i = 0; i < 8 && cur; i += 1) {
+              const text = (cur.innerText || cur.textContent || '').slice(0, 400);
+              if (/irregular\\s+chutes/i.test(text)) return true;
+              cur = cur.parentElement;
+            }
+            return false;
+          };
+
+          for (const table of document.querySelectorAll('table')) {
+            if (!looksIrregular(table)) continue;
+            const headers = [...table.querySelectorAll('th, thead td')].map(
+              (el) => (el.textContent || '').trim().toLowerCase()
+            );
+            const hasChute = headers.some((h) => h === 'chute');
+            const hasParcels = headers.some((h) => /parcel/.test(h));
+            if (headers.length && (!hasChute || !hasParcels)) continue;
+            for (const tr of table.querySelectorAll('tbody tr, tr')) {
+              const cells = [...tr.querySelectorAll('td')].map(
+                (td) => (td.textContent || '').trim()
+              );
+              if (cells.length < 2) continue;
+              if (!/^\\d{5,6}$/.test(cells[0]) || !/^\\d+$/.test(cells[1].replace(/,/g, ''))) {
+                continue;
+              }
+              push(Number(cells[0]), Number(cells[1].replace(/,/g, '')));
+            }
+          }
+
+          if (out.length) return out;
+
+          // Streamlit dataframe / grid cells near the Irregular heading.
+          const heading = [...document.querySelectorAll('h1,h2,h3,h4,p,div,span')]
+            .find((el) => /irregular\\s+chutes/i.test((el.textContent || '').trim()));
+          if (heading) {
+            let root = heading.parentElement;
+            for (let i = 0; i < 5 && root; i += 1) {
+              const text = (root.innerText || '').trim();
+              if (/irregular\\s+chutes/i.test(text) && /\\b\\d{5,6}\\b/.test(text)) {
+                const lines = text.split(/\\n+/).map((l) => l.trim()).filter(Boolean);
+                let started = false;
+                for (const line of lines) {
+                  if (/irregular\\s+chutes/i.test(line)) { started = true; continue; }
+                  if (!started) continue;
+                  const m = line.match(/^(\\d{5,6})\\s+(\\d+)\\s*$/);
+                  if (m) push(Number(m[1]), Number(m[2]));
+                }
+                break;
+              }
+              root = root.parentElement;
+            }
+          }
+          return out;
+        }"""
+    )
+    rows = [
+        ChuteRow(chute_id=int(row["chute_id"]), volume=int(row["volume"]))
+        for row in (raw or [])
+        if row.get("chute_id")
+    ]
+    if rows:
+        print(f"Parsed {len(rows)} irregular chute volumes from the side table.")
+        return rows
+
+    # Fallback: body text (handles split cells / markdown tables).
+    try:
+        page_text = target.locator("body").inner_text(timeout=10_000)
+    except Exception:
+        page_text = ""
+    rows = parse_irregular_chute_text(page_text)
+    if rows:
+        print(f"Parsed {len(rows)} irregular chute volumes from page text.")
+    else:
+        print("No irregular chute table found on page (ok if none this batch).")
+    return rows
+
+
+def _all_chute_rows(target: Page | Frame) -> list[ChuteRow]:
+    """Heat-map grid plus Irregular chutes table (5/6-digit splits)."""
+    return _complete_chute_grid(_parse_chutes(target) + _parse_irregular_chutes(target))
 
 
 def _parse_feed_stations(target: Page | Frame) -> list[FeedStationRow]:
@@ -724,7 +894,7 @@ def scrape_on_page(
     target = _submit_query_with_recovery(page, settings, job)
     return ScrapeResult(
         hourly=_capture_hourly_throughput(page, job, finalized_hours=finalized_hours),
-        chutes=_complete_chute_grid(_parse_chutes(target)),
+        chutes=_all_chute_rows(target),
         feed_stations=_parse_feed_stations(target),
         scraped_at=datetime.now(timezone.utc),
     )

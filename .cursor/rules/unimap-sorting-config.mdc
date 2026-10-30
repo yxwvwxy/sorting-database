@@ -18,4 +18,6 @@ An evening start belongs to the next calendar ops day. The 6:10pm scrape on 2026
 
 Mid-day switch on ops day 2026-10-29: scrapes before 12:10 ET still use the prior plan; scrapes at or after 12:10 ET stay on ops day 2026-10-29 but use plan `458隔口配置`. Mark the prior open rows with `end_date = 2026-10-29`. New rows from `458隔口配置` start `effective_date = 2026-10-29`. That plan adds 5-digit and 6-digit chute ids (for example 10101 beside 101, 106401 beside 1064): treat them as new chute ids with their own routes, not as aliases of the 3-digit physical slot. Read `458隔口配置` for the full live table after 12:10, including unchanged 3-digit chutes. Chute 669 is JFK175 by_route with 185191.22-EWR.H-FRG01-66-U (not EWR.H). Do not insert another copy unless the user reports a newer live change.
 
+5/6-digit split volumes are not on the heat map. On Sorting Production Analysis they appear in the **Irregular chutes** table (Chute / Parcels = cumulative batch volume at query time). The scraper stores those rows in `chute_volume` alongside the 400-grid; Pull includes them when volume is 1–199 and the chute is configured.
+
 Evening swaps opening ops day 2026-10-30: chute 170 is EWR.H by_city ERI01; 220 is EWR.H by_city BUF01; 467 takes the prior 170 LDJ01 set; 516 takes the prior 220 LDJ01 set. Prior open rows for those four end on 2026-10-29.
