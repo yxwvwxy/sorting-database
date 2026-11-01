@@ -92,13 +92,17 @@ def validate_supabase_settings(settings: Settings) -> None:
 
 # 19:10 ET is the last scrape of the current ops day.
 # 19:30 ET is the first scrape of the new ops day and must read the new Batch No.
-# On an early-switch date the last scrape is 18:10, and 18:30 opens the next batch.
+# Early-switch dates open earlier: the :10 before that time stays on the current
+# ops day (e.g. 18:10 / 18:30, or 17:10 / 17:30 on 2026-11-01).
 OPS_SWITCH_HOUR = 19
 OPS_SWITCH_MINUTE = 30
-EARLY_OPS_SWITCH_ON = frozenset({
-    date(2026, 10, 22),
-    date(2026, 10, 25),
-})
+EARLY_OPS_SWITCH_AT: dict[date, tuple[int, int]] = {
+    date(2026, 10, 22): (18, 30),
+    date(2026, 10, 25): (18, 30),
+    date(2026, 11, 1): (17, 30),
+}
+# Back-compat alias for callers that only need the set of early dates.
+EARLY_OPS_SWITCH_ON = frozenset(EARLY_OPS_SWITCH_AT)
 EARLY_OPS_SWITCH_HOUR = 18
 EARLY_OPS_SWITCH_MINUTE = 30
 
@@ -125,15 +129,16 @@ def _as_eastern(now: datetime | None = None) -> datetime:
 
 def _ops_switch_clock(current: datetime) -> tuple[int, int]:
     """Hour and minute when this evening's new ops day opens."""
-    if current.date() in EARLY_OPS_SWITCH_ON:
-        return EARLY_OPS_SWITCH_HOUR, EARLY_OPS_SWITCH_MINUTE
-    return OPS_SWITCH_HOUR, OPS_SWITCH_MINUTE
+    return EARLY_OPS_SWITCH_AT.get(
+        current.date(),
+        (OPS_SWITCH_HOUR, OPS_SWITCH_MINUTE),
+    )
 
 
 def new_ops_window_started(now: datetime | None = None) -> bool:
     """True from the evening switch until the next day's switch.
 
-    Normally 19:30 ET. On an early-switch date the window opens at 18:30.
+    Normally 19:30 ET. Early-switch dates use EARLY_OPS_SWITCH_AT (e.g. 18:30 or 17:30).
     """
     current = _as_eastern(now)
     hour, minute = _ops_switch_clock(current)
@@ -143,8 +148,9 @@ def new_ops_window_started(now: datetime | None = None) -> bool:
 def is_closing_scrape_slot(now: datetime | None = None) -> bool:
     """True for the :10 before the switch. That scrape stays on the current batch.
 
-    Normally 19:00–19:29 ET. On an early-switch date it is 18:00–18:29, so
-    18:10 stays on the current batch and 18:30 may open the new batch.
+    Normally 19:00–19:29 ET. On early-switch evenings it is the hour before the
+    switch (e.g. 18:00–18:29 or 17:00–17:29), so 18:10 / 17:10 stay on the
+    current batch and 18:30 / 17:30 may open the new batch.
     """
     current = _as_eastern(now)
     hour, minute = _ops_switch_clock(current)
