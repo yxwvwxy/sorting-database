@@ -470,14 +470,6 @@
       font-weight: 500;
     }
     .bundle-table.status-board td.zero { color: var(--muted); }
-    .bundle-table.pull-board thead th { color: var(--ink); }
-    .bundle-table.pull-board tbody th {
-      text-align: left;
-      color: var(--mint);
-      font-weight: 500;
-    }
-    .bundle-table.pull-board td.zero,
-    .bundle-table.pull-board td.skip { color: var(--muted); }
     .bundle-fold { margin: -0.4rem 0 1.15rem; }
     .bundle-fold summary,
     .bundle-band > summary {
@@ -2277,51 +2269,7 @@
         .reduce((sum, r) => sum + Number(r.bundle_count || 0), 0);
     }
 
-    function pullMonthDay(ymd) {
-      const [, m, d] = String(ymd).slice(0, 10).split("-").map(Number);
-      return `${m}/${d}`;
-    }
-
-    function physicalChuteKey(chuteId) {
-      const id = Number(chuteId);
-      if (id >= 10000 && id % 100 === 1) return [Math.floor(id / 100), id];
-      return [id, id];
-    }
-
-    function renderPullList(rows) {
-      const pulls = (rows || []).filter((row) => row.chute_id != null);
-      const opsDate = pulls[0]?.ops_date || (rows && rows[0] && rows[0].ops_date) || null;
-      const label = opsDate ? pullMonthDay(opsDate) : "";
-      if (!pulls.length) {
-        return `
-          <h2>Pull</h2>
-          <p class="caption">${label ? `Ops day ${label}. ` : ""}Configured chutes with volume 1–199. None.</p>`;
-      }
-      pulls.sort((a, b) => {
-        const [ap, ai] = physicalChuteKey(a.chute_id);
-        const [bp, bi] = physicalChuteKey(b.chute_id);
-        return ap - bp || ai - bi;
-      });
-      const body = pulls.map((row) => `
-        <tr>
-          <th>${esc(row.chute_id)}</th>
-          <td>${fmt(row.volume)}</td>
-        </tr>`).join("");
-      const open = collapsedBundleBands.has("pull") ? "" : "open";
-      return `
-        <h2>Pull</h2>
-        <details class="bundle-band" data-band="pull" ${open}>
-          <summary>Ops day ${esc(label)} · volume 1–199 · ${fmt(pulls.length)}</summary>
-          <div class="bundle-table-wrap">
-            <table class="bundle-table pull-board">
-              <thead><tr><th>Chute</th><th>Volume</th></tr></thead>
-              <tbody>${body}</tbody>
-            </table>
-          </div>
-        </details>`;
-    }
-
-    function renderBundle(rows, pulls) {
+    function renderBundle(rows) {
       const counts = rows.filter((r) => r.row_kind === "count" && ["uni_hub", "jfk", "pwm", "ewr", "bwi"].includes(r.group_name));
       const visible = ["Created", "Shipped", "Arrived"];
       const foldOrder = ["Inbound", "Draft", "Cancelled"];
@@ -2361,17 +2309,13 @@
             <summary title="Inbound, Draft, Cancelled"></summary>
           </details>
         </div>
-        ${renderPullList(pulls)}
       `;
     }
 
     async function loadBundleBoard() {
       showError("bundle-error", null);
-      const [rows, pulls] = await Promise.all([
-        rpc("bundle_board", { p_operation_date: etDaysAgoYmd(0) }),
-        rpc("barrel_pull_list"),
-      ]);
-      renderBundle(rows || [], pulls || []);
+      const rows = await rpc("bundle_board", { p_operation_date: etDaysAgoYmd(0) });
+      renderBundle(rows || []);
     }
 
     async function bootApp() {
