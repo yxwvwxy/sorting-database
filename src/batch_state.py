@@ -1,4 +1,4 @@
-"""Persist the active batch and optional post-19:30 switch polling state."""
+"""Persist the active batch and ops-day phase / Slot poll state."""
 
 from __future__ import annotations
 
@@ -20,6 +20,8 @@ class BatchState:
     window_operation_date: date | None = None
     resolved_at: str | None = None
     source: str | None = None
+    # 1 = evening batch, 2 = mid-night batch, 3 = morning batch (same ops day).
+    phase: int = 1
 
 
 def batch_state_path() -> Path:
@@ -41,19 +43,28 @@ def load_batch_state(*, machine_id: int = 9) -> BatchState | None:
 
     raw_ops = data.get("operation_date")
     if raw_ops:
+        # Prefer the stored ops date. Mid-ops batch 2/3 stamps can parse to the
+        # next calendar day; the scraper locks the evening window's ops date.
         operation_date = date.fromisoformat(str(raw_ops))
     else:
         operation_date = operation_date_from_subbatch(subbatch)
-    try:
-        parsed_ops = operation_date_from_subbatch(subbatch)
-        if operation_date != parsed_ops:
-            operation_date = parsed_ops
-    except RuntimeError:
-        pass
 
     window_raw = data.get("window_operation_date")
     window_operation_date = date.fromisoformat(str(window_raw)) if window_raw else None
     awaiting_from = (data.get("awaiting_from") or "").strip() or None
+    source = (data.get("source") or "").strip() or None
+
+    phase_raw = data.get("phase")
+    if phase_raw is not None:
+        phase = int(phase_raw)
+    elif source == "slot_assignment_batch3":
+        phase = 3
+    elif source == "slot_assignment_batch2":
+        phase = 2
+    else:
+        phase = 1
+    if phase not in (1, 2, 3):
+        phase = 1
 
     return BatchState(
         job=SubbatchJob(
@@ -64,7 +75,8 @@ def load_batch_state(*, machine_id: int = 9) -> BatchState | None:
         awaiting_from=awaiting_from,
         window_operation_date=window_operation_date,
         resolved_at=data.get("resolved_at"),
-        source=data.get("source"),
+        source=source,
+        phase=phase,
     )
 
 
@@ -74,8 +86,11 @@ def save_batch_state(
     source: str = "slot_assignment",
     awaiting_from: str | None = None,
     window_operation_date: date | None = None,
+    phase: int = 1,
 ) -> Path:
     path = batch_state_path()
+    if phase not in (1, 2, 3):
+        phase = 1
     payload = {
         "subbatch": job.subbatch,
         "operation_date": job.operation_date.isoformat(),
@@ -86,6 +101,7 @@ def save_batch_state(
         "window_operation_date": (
             window_operation_date.isoformat() if window_operation_date else None
         ),
+        "phase": phase,
     }
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     return path

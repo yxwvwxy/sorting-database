@@ -146,10 +146,26 @@ if batches.empty:
     st.warning("No scrape batches in Supabase yet.")
     st.stop()
 
-labels = [
-    f"{row.subbatch_date} · {row.subbatch} · {row.scrape_count} snaps · {row.latest_total:,}"
-    for row in batches.itertuples()
-]
+def _batch_label(row) -> str:
+    phase = getattr(row, "batch_phase", None)
+    try:
+        phase_i = int(phase)
+        has_phase = phase_i in (1, 2, 3)
+    except (TypeError, ValueError):
+        has_phase = False
+        phase_i = None
+    if has_phase:
+        return (
+            f"{row.subbatch_date} · #{phase_i} · {row.subbatch} · "
+            f"{row.scrape_count} snaps · {row.latest_total:,}"
+        )
+    return (
+        f"{row.subbatch_date} · {row.subbatch} · "
+        f"{row.scrape_count} snaps · {row.latest_total:,}"
+    )
+
+
+labels = [_batch_label(row) for row in batches.itertuples()]
 choice = st.sidebar.selectbox("Batch / ops day", options=list(range(len(labels))), format_func=lambda i: labels[i])
 selected = batches.iloc[choice]
 subbatch = str(selected["subbatch"])

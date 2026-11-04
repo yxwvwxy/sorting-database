@@ -113,11 +113,33 @@ class SubbatchJob:
 
     ``operation_date`` is the business day (stamp date + 1).
     The live batch number comes from Slot Assignment at 19:30 ET.
+    ``batch_phase`` is 1/2/3 within that ops day; ``plan_kind`` is
+    ``regular`` or ``resort_by_route``.
     """
 
     operation_date: date
     subbatch: str
     machine_id: int
+    batch_phase: int | None = None
+    plan_kind: str | None = None
+
+
+def plan_kind_for_phase(phase: int | None) -> str | None:
+    if phase == 2:
+        return "resort_by_route"
+    if phase in (1, 3):
+        return "regular"
+    return None
+
+
+def job_with_phase(job: SubbatchJob, phase: int) -> SubbatchJob:
+    return SubbatchJob(
+        operation_date=job.operation_date,
+        subbatch=job.subbatch,
+        machine_id=job.machine_id,
+        batch_phase=phase,
+        plan_kind=plan_kind_for_phase(phase),
+    )
 
 
 def _as_eastern(now: datetime | None = None) -> datetime:

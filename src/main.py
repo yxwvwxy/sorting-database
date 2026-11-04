@@ -13,6 +13,7 @@ from .batch_resolve import resolve_job
 from .config import (
     ET,
     Settings,
+    SubbatchJob,
     is_opening_initials_slot,
     validate_supabase_settings,
     validate_uniuni_login_settings,
@@ -22,11 +23,177 @@ from .db import (
     fetch_finalized_hourly_buckets,
     has_city_initials,
     has_subbatch_scrape,
+    record_gofo_plan_switch,
     save_city_initials,
     save_scrape_result,
 )
 from .scraper import ScrapeResult, hour_bucket_key
-from .session import open_uniuni_session
+from .session import UniUniSession, open_uniuni_session
+
+
+def _scrape_one_job(
+    *,
+    session: UniUniSession,
+    client,
+    job: SubbatchJob,
+    dry_run: bool,
+    chutes_only: bool,
+    force_initials: bool,
+    initials_only: bool,
+) -> dict:
+    print(f"Operation date: {job.operation_date}")
+    print(f"Subbatch: {job.subbatch} | Machine: {job.machine_id}")
+
+    already_scraped = False
+    already_initials = False
+    if client is not None:
+        already_scraped = has_subbatch_scrape(client, job.subbatch)
+        already_initials = has_city_initials(client, job.subbatch)
+        print(
+            f"Existing scrape for batch: {already_scraped}; "
+            f"city initials saved: {already_initials}"
+        )
+
+    initials_summary: dict | None = None
+    opening_slot = is_opening_initials_slot()
+
+    if initials_only and not force_initials:
+        print(
+            "Refusing --initials-only. Five-city Workflow 存量 is no longer captured."
+        )
+        return {"error": "initials_only_disabled", "subbatch": job.subbatch}
+
+    take_initials = (not chutes_only) and force_initials
+    if take_initials:
+        print(
+            "Fetching city initials from Workflow Management "
+            "(skipping chute/隔口 scrape this run)."
+        )
+        initials = session.fetch_city_initials(job)
+        initials_at = initials.scraped_at
+        if force_initials and not opening_slot:
+            initials_at = datetime.now(ET).replace(
+                hour=21, minute=31, second=0, microsecond=0
+            )
+            print(
+                "Late 7pm five-city capture: storing scraped_at as "
+                f"{initials_at.isoformat()} so city_volume_series treats it as opening 存量."
+            )
+        initials_summary = {
+            "subbatch": initials.subbatch,
+            "operation_date": initials.operation_date,
+            "scraped_at": initials_at.isoformat(),
+            "cities": {row.city: row.initial_volume for row in initials.rows},
+        }
+        if not dry_run:
+            assert client is not None
+            save_city_initials(
+                client,
+                job,
+                [
+                    {"city": row.city, "initial_volume": row.initial_volume}
+                    for row in initials.rows
+                ],
+                scraped_at=initials_at,
+                source=(
+                    "workflow_management_late"
+                    if force_initials and not opening_slot
+                    else "workflow_management"
+                ),
+            )
+            print(
+                "Saved city_initial_volume for "
+                + ", ".join(
+                    f"{row.city}={row.initial_volume}" for row in initials.rows
+                )
+            )
+        else:
+            print("Dry run — city initials not written.")
+
+        if not dry_run and not already_scraped and not force_initials:
+            assert client is not None
+            marker = ScrapeResult(
+                scraped_at=datetime.now(timezone.utc),
+                hourly=[],
+                chutes=[],
+                feed_stations=[],
+            )
+            save_scrape_result(client, job, marker)
+            print(
+                "Saved empty scrape marker (no chute rows) so later runs "
+                "will scrape Sorting Production Analysis."
+            )
+
+        return {
+            "operation_date": job.operation_date.isoformat(),
+            "subbatch": job.subbatch,
+            "machine_id": job.machine_id,
+            "mode": "city_initials_first_run",
+            "hourly_rows": 0,
+            "chute_rows": 0,
+            "feed_station_rows": 0,
+            "city_initials": initials_summary,
+            "note": (
+                "Skipped chute/隔口 scrape on 21:30 opening run. "
+                "Five-city totals = workflow 存量 + later chute. "
+                "RIC Warehouse → RIC and BOS Warehouse → PVD2 are valid "
+                "only at this opening slot."
+            ),
+        }
+
+    finalized_hours = None
+    if client is not None:
+        finalized_hours = fetch_finalized_hourly_buckets(client, job.subbatch)
+        print(f"Finalized hourly buckets already in DB: {len(finalized_hours)}")
+
+    result = session.scrape(job, finalized_hours=finalized_hours)
+
+    now_et = datetime.now(ET)
+    current_key = hour_bucket_key(now_et.replace(minute=0, second=0, microsecond=0))
+    backfilled = [
+        row.bucket_time.isoformat(sep=" ")
+        for row in result.hourly
+        if hour_bucket_key(row.bucket_time) != current_key
+    ]
+    summary = {
+        "operation_date": job.operation_date.isoformat(),
+        "subbatch": job.subbatch,
+        "machine_id": job.machine_id,
+        "mode": "chute_scrape",
+        "hourly_rows": len(result.hourly),
+        "chute_rows": len(result.chutes),
+        "feed_station_rows": len(result.feed_stations),
+        "scraped_at": result.scraped_at.isoformat(),
+        "city_initials": initials_summary,
+        "hourly_note": (
+            "current hour updates every scrape; completed hours written once when finalized "
+            "(or backfilled after an outage)"
+            if result.hourly
+            else "no matching hourly buckets in chart CSV"
+        ),
+        "hourly_backfill": backfilled,
+        "hourly_sample": [
+            {
+                "bucket_time": row.bucket_time.isoformat(sep=" "),
+                "hourly_volume": row.hourly_volume,
+                "cumulative_volume": row.cumulative_volume,
+            }
+            for row in result.hourly[:5]
+        ],
+        "chute_sample": [
+            {"chute_id": row.chute_id, "volume": row.volume} for row in result.chutes[:5]
+        ],
+    }
+    print(json.dumps(summary, indent=2))
+
+    if dry_run:
+        print("Dry run complete - no Supabase writes for this batch.")
+        return summary
+
+    assert client is not None
+    save_scrape_result(client, job, result)
+    print(f"Saved scrape snapshot to Supabase (scraped_at={result.scraped_at.isoformat()}).")
+    return summary
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -99,8 +266,9 @@ def main(argv: list[str] | None = None) -> int:
 
     # One browser for the whole run: reuse nj600 session; if Slot Assignment is
     # needed first, navigate that same session to Sorting Production Analysis.
+    # Mid-ops batch switches may scrape the closing batch then the opening batch.
     with open_uniuni_session(settings, headless=not args.headed) as session:
-        job = resolve_job(
+        resolved = resolve_job(
             settings,
             subbatch_override=args.subbatch,
             machine_id_override=args.machine_id,
@@ -109,163 +277,53 @@ def main(argv: list[str] | None = None) -> int:
             headless=not args.headed,
             session=session,
         )
-
-        print(f"Operation date: {job.operation_date}")
-        print(f"Subbatch: {job.subbatch} | Machine: {job.machine_id}")
-
-        already_scraped = False
-        already_initials = False
-        if client is not None:
-            already_scraped = has_subbatch_scrape(client, job.subbatch)
-            already_initials = has_city_initials(client, job.subbatch)
+        if len(resolved.jobs) > 1:
             print(
-                f"Existing scrape for batch: {already_scraped}; "
-                f"city initials saved: {already_initials}"
+                f"Mid-ops switch run: scraping {len(resolved.jobs)} batches "
+                f"({', '.join(j.subbatch for j in resolved.jobs)})."
             )
 
-        # Five-city Workflow initials are no longer part of the scrape.
-        # 19:30 reads the new Batch No, then scrapes chute volumes.
-        initials_summary: dict | None = None
-        opening_slot = is_opening_initials_slot()
-
-        if args.initials_only and not args.force_initials:
-            print(
-                "Refusing --initials-only. Five-city Workflow 存量 is no longer captured."
+        summaries: list[dict] = []
+        for index, job in enumerate(resolved.jobs):
+            summary = _scrape_one_job(
+                session=session,
+                client=client,
+                job=job,
+                dry_run=args.dry_run,
+                chutes_only=args.chutes_only,
+                force_initials=args.force_initials,
+                initials_only=args.initials_only,
             )
-            return 1
+            if summary.get("error") == "initials_only_disabled":
+                return 1
+            summaries.append(summary)
 
-        take_initials = (not args.chutes_only) and args.force_initials
-        if take_initials:
-            print(
-                "Fetching city initials from Workflow Management "
-                "(skipping chute/隔口 scrape this run)."
-            )
-            initials = session.fetch_city_initials(job)
-            initials_at = initials.scraped_at
-            if args.force_initials and not opening_slot:
-                initials_at = datetime.now(ET).replace(
-                    hour=21, minute=31, second=0, microsecond=0
-                )
-                print(
-                    "Late 7pm five-city capture: storing scraped_at as "
-                    f"{initials_at.isoformat()} so city_volume_series treats it as opening 存量."
-                )
-            initials_summary = {
-                "subbatch": initials.subbatch,
-                "operation_date": initials.operation_date,
-                "scraped_at": initials_at.isoformat(),
-                "cities": {row.city: row.initial_volume for row in initials.rows},
-            }
-            if not args.dry_run:
-                assert client is not None
-                save_city_initials(
+            # After batch 2's last scrape on the discovery run, stamp the
+            # regular-plan cutover so batch 3's first scrape uses 1103.
+            if (
+                resolved.regular_plan_switch
+                and index == 0
+                and client is not None
+                and not args.dry_run
+            ):
+                switch_at = datetime.now(timezone.utc)
+                recorded = record_gofo_plan_switch(
                     client,
-                    job,
-                    [
-                        {"city": row.city, "initial_volume": row.initial_volume}
-                        for row in initials.rows
-                    ],
-                    scraped_at=initials_at,
-                    source=(
-                        "workflow_management_late"
-                        if args.force_initials and not opening_slot
-                        else "workflow_management"
+                    job.operation_date,
+                    switch_at,
+                    note=(
+                        "458隔口配置 → 458隔口-多细分1103 "
+                        f"(batch 3 open, ops {job.operation_date.isoformat()})"
                     ),
                 )
                 print(
-                    "Saved city_initial_volume for "
-                    + ", ".join(
-                        f"{row.city}={row.initial_volume}" for row in initials.rows
-                    )
-                )
-            else:
-                print("Dry run — city initials not written.")
-
-            if not args.dry_run and not already_scraped and not args.force_initials:
-                assert client is not None
-                marker = ScrapeResult(
-                    scraped_at=datetime.now(timezone.utc),
-                    hourly=[],
-                    chutes=[],
-                    feed_stations=[],
-                )
-                save_scrape_result(client, job, marker)
-                print(
-                    "Saved empty scrape marker (no chute rows) so later runs "
-                    "will scrape Sorting Production Analysis."
+                    f"Recorded regular-plan switch_at={recorded.isoformat()} "
+                    f"for ops {job.operation_date} "
+                    "(458隔口配置 end / 458隔口-多细分1103 start)."
                 )
 
-            summary = {
-                "operation_date": job.operation_date.isoformat(),
-                "subbatch": job.subbatch,
-                "machine_id": job.machine_id,
-                "mode": "city_initials_first_run",
-                "hourly_rows": 0,
-                "chute_rows": 0,
-                "feed_station_rows": 0,
-                "city_initials": initials_summary,
-                "note": (
-                    "Skipped chute/隔口 scrape on 21:30 opening run. "
-                    "Five-city totals = workflow 存量 + later chute. "
-                    "RIC Warehouse → RIC and BOS Warehouse → PVD2 are valid "
-                    "only at this opening slot."
-                ),
-            }
-            print(json.dumps(summary, indent=2))
-            return 0
-
-        finalized_hours = None
-        if client is not None:
-            finalized_hours = fetch_finalized_hourly_buckets(client, job.subbatch)
-            print(f"Finalized hourly buckets already in DB: {len(finalized_hours)}")
-
-        result = session.scrape(job, finalized_hours=finalized_hours)
-
-    now_et = datetime.now(ET)
-    current_key = hour_bucket_key(now_et.replace(minute=0, second=0, microsecond=0))
-    backfilled = [
-        row.bucket_time.isoformat(sep=" ")
-        for row in result.hourly
-        if hour_bucket_key(row.bucket_time) != current_key
-    ]
-    summary = {
-        "operation_date": job.operation_date.isoformat(),
-        "subbatch": job.subbatch,
-        "machine_id": job.machine_id,
-        "mode": "chute_scrape",
-        "hourly_rows": len(result.hourly),
-        "chute_rows": len(result.chutes),
-        "feed_station_rows": len(result.feed_stations),
-        "scraped_at": result.scraped_at.isoformat(),
-        "city_initials": initials_summary,
-        "hourly_note": (
-            "current hour updates every scrape; completed hours written once when finalized "
-            "(or backfilled after an outage)"
-            if result.hourly
-            else "no matching hourly buckets in chart CSV"
-        ),
-        "hourly_backfill": backfilled,
-        "hourly_sample": [
-            {
-                "bucket_time": row.bucket_time.isoformat(sep=" "),
-                "hourly_volume": row.hourly_volume,
-                "cumulative_volume": row.cumulative_volume,
-            }
-            for row in result.hourly[:5]
-        ],
-        "chute_sample": [
-            {"chute_id": row.chute_id, "volume": row.volume} for row in result.chutes[:5]
-        ],
-    }
-    print(json.dumps(summary, indent=2))
-
-    if args.dry_run:
-        print("Dry run complete - no Supabase writes.")
-        return 0
-
-    assert client is not None
-    save_scrape_result(client, job, result)
-    print(f"Saved scrape snapshot to Supabase (scraped_at={result.scraped_at.isoformat()}).")
+    if len(summaries) > 1:
+        print(json.dumps({"batches": summaries}, indent=2))
     return 0
 
 

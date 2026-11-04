@@ -1,6 +1,7 @@
--- Plan 458隔口-多细分1103. Provisional start ops day 2026-11-05 (exact switch time TBD; adjust later).
--- Unchanged open rows keep end_date null. Touched chutes: prior open -> end_date 2026-11-04;
--- new/changed rows effective_date 2026-11-05. Ended chutes get no successor.
+-- Plan 458隔口-多细分1103. Same-ops-day mid-switch on 2026-11-05: touched
+-- prior rows end_date and new rows effective_date are both 2026-11-05 (corrected
+-- from provisional 2026-11-04 by gofo_plan_switch_at). The scrape clock when
+-- batch 3 is first seen is stored in gofo_plan_switch as the cutover instant.
 
 -- Ensure structure rows exist for new split chute ids (same lane as physical parent).
 INSERT INTO public.chute_structure (chute_id, lane_id)
@@ -62,10 +63,12 @@ WHERE NOT EXISTS (
     SELECT 1 FROM public.chute_structure s WHERE s.chute_id = v.chute_id
 );
 
+-- 269/320 are absent from 458隔口-多细分1103, but keep current Active mapping
+-- open until the exact 11/5 switch clock time is confirmed.
 UPDATE public.chute_destination_gofo
 SET end_date = DATE '2026-11-04'
 WHERE end_date IS NULL
-  AND chute_id IN (169,269,320,367,568,608,665,669,716,967,969,1053,1054,1055,1065,1066,1067,1068,1069,1070,106501,106601,106701);
+  AND chute_id IN (169,367,568,608,665,669,716,967,969,1053,1054,1055,1065,1066,1067,1068,1069,1070,106501,106601,106701);
 
 INSERT INTO public.chute_destination_gofo (
     chute_id, bundle_type, destination_warehouse, effective_date, route, sort_type

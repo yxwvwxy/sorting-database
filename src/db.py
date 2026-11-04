@@ -52,6 +52,27 @@ def create_supabase_client(settings: Settings) -> Client:
     return create_client(settings.supabase_url, settings.supabase_service_role_key)
 
 
+def record_gofo_plan_switch(
+    client: Client,
+    ops_date: date,
+    switch_at: datetime,
+    *,
+    note: str | None = None,
+) -> datetime:
+    """Persist the scrape-time clock for a same-ops-day regular plan cutover."""
+    payload = {
+        "p_ops_date": ops_date.isoformat(),
+        "p_switch_at": _as_utc_iso(switch_at),
+        "p_note": note,
+    }
+    raw = client.rpc("record_gofo_plan_switch", payload).execute().data
+    if isinstance(raw, str):
+        return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    if isinstance(raw, datetime):
+        return raw
+    raise RuntimeError(f"Unexpected record_gofo_plan_switch response: {raw!r}")
+
+
 def _as_utc_iso(value: datetime) -> str:
     if value.tzinfo is None:
         value = value.replace(tzinfo=timezone.utc)
@@ -136,18 +157,20 @@ def save_scrape_result(
         {"station_id": row.station_id, "volume": row.volume} for row in result.feed_stations
     ]
 
-    client.rpc(
-        "save_scrape_snapshot",
-        {
-            "p_subbatch": job.subbatch,
-            "p_machine_id": job.machine_id,
-            "p_subbatch_date": job.operation_date.isoformat(),
-            "p_scraped_at": scraped_at,
-            "p_hourly": hourly_rows,
-            "p_chutes": chute_rows,
-            "p_feeds": feed_rows,
-        },
-    ).execute()
+    payload: dict[str, Any] = {
+        "p_subbatch": job.subbatch,
+        "p_machine_id": job.machine_id,
+        "p_subbatch_date": job.operation_date.isoformat(),
+        "p_scraped_at": scraped_at,
+        "p_hourly": hourly_rows,
+        "p_chutes": chute_rows,
+        "p_feeds": feed_rows,
+    }
+    if job.batch_phase is not None:
+        payload["p_batch_phase"] = job.batch_phase
+    if job.plan_kind:
+        payload["p_plan_kind"] = job.plan_kind
+    client.rpc("save_scrape_snapshot", payload).execute()
 
 
 def has_subbatch_scrape(client: Client, subbatch: str) -> bool:
