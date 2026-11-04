@@ -30,8 +30,7 @@ Live site (GitHub Pages from this repo’s `docs/`):
 
 **https://yxwvwxy.github.io/sorting-database/**
 
-- Must sign in before data loads (`city_volume_series` / `list_scrape_batches` are `authenticated` only)
-- Or click **Login as Guest** (read-only; same RLS as signed-in users)
+- Must sign in with username and password before data loads (`city_volume_series` / `list_scrape_batches` are `authenticated` only)
 - `last_mile` → city; `transit` → warehouse  
 - Source of truth for Pages: [`docs/index.html`](docs/index.html) (keep [`web/index.html`](web/index.html) in sync for optional Supabase Storage publish)
 
