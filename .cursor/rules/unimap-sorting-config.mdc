@@ -21,3 +21,5 @@ Mid-day switch on ops day 2026-10-29: scrapes before 12:10 ET still use the prio
 5/6-digit split volumes are not on the heat map. On Sorting Production Analysis they appear in the **Irregular chutes** table (Chute / Parcels = cumulative batch volume at query time). The scraper stores those rows in `chute_volume` alongside the 400-grid; Pull includes them when volume is 1–199 and the chute is configured.
 
 Evening swaps opening ops day 2026-10-30: chute 170 is EWR.H by_city ERI01; 220 is EWR.H by_city BUF01; 467 takes the prior 170 LDJ01 set; 516 takes the prior 220 LDJ01 set. Prior open rows for those four end on 2026-10-29.
+
+Provisional morning switch to plan `458隔口-多细分1103` on ops day 2026-11-05 (exact clock time TBD; remap when confirmed). Touched chutes only: prior open rows `end_date = 2026-11-04`; new/changed rows `effective_date = 2026-11-05`. Unchanged chutes keep `end_date` null. 269 and 320 end with no successor. Reject moves to 107001; 1070 takes the prior 1068 ROC01 set. New split ids include 57001, 62001, 67001, 72001, 77001, 82001, 87001, 92001, 97001, 102001, 105201–105801, 106801, 106901, 107001.
