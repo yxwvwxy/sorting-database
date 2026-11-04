@@ -59,7 +59,7 @@ def _scrape_one_job(
 
     if initials_only and not force_initials:
         print(
-            "Refusing --initials-only. Five-city Workflow 存量 is no longer captured."
+            "Refusing --initials-only. Five-city Workflow opening stock is no longer captured."
         )
         return {"error": "initials_only_disabled", "subbatch": job.subbatch}
 
@@ -67,7 +67,7 @@ def _scrape_one_job(
     if take_initials:
         print(
             "Fetching city initials from Workflow Management "
-            "(skipping chute/隔口 scrape this run)."
+            "(skipping chute scrape this run)."
         )
         initials = session.fetch_city_initials(job)
         initials_at = initials.scraped_at
@@ -77,7 +77,7 @@ def _scrape_one_job(
             )
             print(
                 "Late 7pm five-city capture: storing scraped_at as "
-                f"{initials_at.isoformat()} so city_volume_series treats it as opening 存量."
+                f"{initials_at.isoformat()} so city_volume_series treats it as opening stock."
             )
         initials_summary = {
             "subbatch": initials.subbatch,
@@ -134,8 +134,8 @@ def _scrape_one_job(
             "feed_station_rows": 0,
             "city_initials": initials_summary,
             "note": (
-                "Skipped chute/隔口 scrape on 21:30 opening run. "
-                "Five-city totals = workflow 存量 + later chute. "
+                "Skipped chute scrape on 21:30 opening run. "
+                "Five-city totals = workflow opening stock + later chute. "
                 "RIC Warehouse → RIC and BOS Warehouse → PVD2 are valid "
                 "only at this opening slot."
             ),
@@ -248,7 +248,7 @@ def main(argv: list[str] | None = None) -> int:
         "--force-initials",
         action="store_true",
         help=(
-            "Fetch Workflow 存量 even outside 21:30–21:49 ET. "
+            "Fetch Workflow opening stock even outside 21:30–21:49 ET. "
             "Does not write an empty chute marker."
         ),
     )
@@ -312,14 +312,14 @@ def main(argv: list[str] | None = None) -> int:
                     job.operation_date,
                     switch_at,
                     note=(
-                        "458隔口配置 → 458隔口-多细分1103 "
+                        "458-config → 458-multisplit-1103 "
                         f"(batch 3 open, ops {job.operation_date.isoformat()})"
                     ),
                 )
                 print(
                     f"Recorded regular-plan switch_at={recorded.isoformat()} "
                     f"for ops {job.operation_date} "
-                    "(458隔口配置 end / 458隔口-多细分1103 start)."
+                    "(458-config end / 458-multisplit-1103 start)."
                 )
 
     if len(summaries) > 1:

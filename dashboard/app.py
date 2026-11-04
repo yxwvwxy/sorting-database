@@ -239,9 +239,9 @@ st.subheader("Latest city / hub totals")
 st.caption(
     "Mapping: `last_mile` → city, `transit` → warehouse "
     "(chute_destination effective for that batch ops day: latest effective_date ≤ subbatch_date). "
-    "Five cities (RIC/ALB/SWF/SYR/PVD2): total = 21:30 Workflow 存量 + chute "
+    "Five cities (RIC/ALB/SWF/SYR/PVD2): total = 21:30 Workflow opening stock + chute "
     "(RIC Warehouse → RIC and BOS Warehouse → PVD2 only at that opening slot). "
-    "If 21:30 存量 was missed, five-city totals are chute only — later warehouse "
+    "If 21:30 opening stock was missed, five-city totals are chute only — later warehouse "
     "totals mix RIC+ORF and BOS+MHT+PVD1+PVD2. Other cities: chute cumulative. "
     "Delta = chute change since previous scrape (floored at 0)."
 )

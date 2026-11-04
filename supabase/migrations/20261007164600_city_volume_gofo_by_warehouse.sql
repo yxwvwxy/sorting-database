@@ -144,7 +144,7 @@ AS $$
 $$;
 
 COMMENT ON FUNCTION public.city_volume_series(text) IS
-  'City/hub series. last_mile uses city. transit and GOFO use warehouse. GOFO rows are section=gofo. Other cities: chute cumulative. RIC/ALB/SWF/SYR/PVD2: 21:30 Workflow 存量 + chute. Missed 21:30 opening scrape: chute only.';
+  'City/hub series. last_mile uses city. transit and GOFO use warehouse. GOFO rows are section=gofo. Other cities: chute cumulative. RIC/ALB/SWF/SYR/PVD2: 21:30 Workflow opening stock + chute. Missed 21:30 opening scrape: chute only.';
 
 GRANT EXECUTE ON FUNCTION public.city_volume_series(text) TO service_role, authenticated, anon;
 

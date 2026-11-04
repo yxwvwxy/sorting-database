@@ -1,4 +1,4 @@
--- Late first scrape of an ops day: 5-city totals are Workflow 存量 plus
+-- Late first scrape of an ops day: 5-city totals are Workflow opening stock plus
 -- chute increment after that scrape (not full overnight chute + afternoon warehouse).
 -- 21:30 opening initials still add full subsequent chute (baseline 0).
 
@@ -92,7 +92,7 @@ AS $$
      AND cm.chute_id = s.chute_id
     GROUP BY m.subbatch, m.subbatch_date, s.scraped_at, COALESCE(cm.city, 'Unmapped')
   ),
-  -- First chute snapshot at/after late initials: 5-city 隔口 baseline (not added to total).
+  -- First chute snapshot at/after late initials: 5-city chute baseline (not added to total).
   late_baseline AS (
     SELECT DISTINCT ON (cc.subbatch, cc.city)
       cc.subbatch,
@@ -169,7 +169,7 @@ AS $$
 $$;
 
 COMMENT ON FUNCTION public.city_volume_series(text) IS
-  'City/hub series. Other cities: chute cumulative. RIC/ALB/SWF/SYR/PVD2: Workflow 存量 + chute increment after 存量 capture (full chute after 21:30 opening; late first scrape uses that scrape as 隔口 baseline).';
+  'City/hub series. Other cities: chute cumulative. RIC/ALB/SWF/SYR/PVD2: Workflow opening stock + chute increment after opening-stock capture (full chute after 21:30 opening; late first scrape uses that scrape as chute baseline).';
 
 GRANT EXECUTE ON FUNCTION public.city_volume_series(text) TO service_role, authenticated, anon;
 

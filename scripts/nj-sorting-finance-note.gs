@@ -2,7 +2,7 @@
  * NJ sorting finance note.
  *
  * Bound to the daily volume sheet. Click a data row, then use the menu
- * "NJ分拣财务群信息" → "生成当日分拣备注". The note is written on the
+ * "NJ sorting finance" → "Create daily note". The note is written on the
  * active cell.
  *
  * Columns read from that row:
@@ -14,8 +14,8 @@ function createDailyNote() {
   const cell = sheet.getActiveCell();
   const row = cell.getRow();
 
-  const date = sheet.getRange(row, 1).getValue();    // A = 日期
-  const total = sheet.getRange(row, 11).getValue();  // K = 今日分拣总量
+  const date = sheet.getRange(row, 1).getValue();    // A = date
+  const total = sheet.getRange(row, 11).getValue();  // K = today's sorted total
 
   if (!date) {
     SpreadsheetApp.getUi().alert("Please click a row that has data.");
@@ -28,16 +28,16 @@ function createDailyNote() {
     Utilities.formatDate(
       d,
       Session.getScriptTimeZone(),
-      "yyyy年MM月dd号"
+      "yyyy-MM-dd"
     ) + "\n" +
-    "今日分拣总量：" + total;
+    "Today sorted total: " + total;
 
   cell.setNote(note);
 }
 
 function onOpen() {
   SpreadsheetApp.getUi()
-    .createMenu("NJ分拣财务群信息")
-    .addItem("生成当日分拣备注", "createDailyNote")
+    .createMenu("NJ sorting finance")
+    .addItem("Create daily note", "createDailyNote")
     .addToUi();
 }

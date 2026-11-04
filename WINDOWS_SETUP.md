@@ -1,17 +1,17 @@
 # Windows = scrape runner · Mac = editor
 
-**分工**
+**Roles**
 
-| 设备 | 做什么 |
-|------|--------|
-| **Windows PC** | 装依赖、存 `.env` / 登录态、Task Scheduler 每 20 分钟跑 scrape |
-| **Mac** | 用 Cursor 改代码 → `git commit` + `git push` |
+| Machine | Job |
+|---------|-----|
+| **Windows PC** | Install deps, keep `.env` / login state, Task Scheduler every 20 minutes |
+| **Mac** | Edit in Cursor → `git commit` + `git push` |
 
-Windows **不要**靠 OneDrive 同步整份工程；用 Git 拉代码。  
-`.env`、`.uniuni-auth-state.json`、`.current-batch.json`、`logs/` 已在 `.gitignore`，只留在 Windows 本机。
+Do **not** sync the whole project with OneDrive on Windows; pull with Git.  
+`.env`, `.uniuni-auth-state.json`, `.current-batch.json`, and `logs/` are gitignored and stay on the Windows box only.
 
-**重要：同一时间只让一台机器跑定时任务。**  
-Windows 正式开跑后，在 Mac 上：
+**Important: only one machine should run the schedule at a time.**  
+After Windows is the live runner, on Mac:
 
 ```bash
 cd ~/Projects/Sorting\ Database
@@ -20,33 +20,33 @@ cd ~/Projects/Sorting\ Database
 
 ---
 
-## A. Mac：日常改代码并推送
+## A. Mac: edit and push
 
 ```bash
 cd ~/Projects/Sorting\ Database
 git checkout main
 git pull origin main
-# …用 Cursor 改代码…
+# …edit in Cursor…
 git add -A
 git commit -m "your message"
 git push origin main
 ```
 
-然后到 **Windows** 拉最新（见 C 节）。
+Then pull on **Windows** (section C).
 
 ---
 
-## B. Windows：一次性安装
+## B. Windows: one-time setup
 
-### 1) 系统
+### 1) System
 
-- Windows 10/11，**电源插着**
-- 时区：**Eastern Time (US & Canada)**
-- 睡眠：插电 **Never**；合盖可灭屏，不要休眠
-- 安装 [Git for Windows](https://git-scm.com/download/win)
-- 安装 [Python 3.11+](https://www.python.org/downloads/)（勾选 **Add python.exe to PATH**）
+- Windows 10/11, **plugged in**
+- Time zone: **Eastern Time (US & Canada)**
+- Sleep: plugged in **Never**; lid close may blank the screen, but do not sleep
+- Install [Git for Windows](https://git-scm.com/download/win)
+- Install [Python 3.11+](https://www.python.org/downloads/) (check **Add python.exe to PATH**)
 
-### 2) 克隆仓库
+### 2) Clone
 
 ```powershell
 cd $HOME\Projects
@@ -55,45 +55,45 @@ cd "Sorting Database"
 git checkout main
 ```
 
-### 3) 虚拟环境 + Playwright
+### 3) venv + Playwright
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\setup_windows.ps1
 ```
 
-### 4) 密钥（只放 Windows）
+### 4) Secrets (Windows only)
 
 ```powershell
 copy .env.example .env
 notepad .env
 ```
 
-至少填：`UNIUNI_USERNAME` / `UNIUNI_PASSWORD`、`SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY`  
-（从 Mac `local.env` / `.env` 手动抄，不要 commit。）
+At least: `UNIUNI_USERNAME` / `UNIUNI_PASSWORD`, `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY`  
+(Copy from Mac `local.env` / `.env` by hand; never commit.)
 
-### 5) 试跑
+### 5) Test run
 
 ```bat
 .\scripts\run_scrape.bat
 ```
 
-成功：`logs\scrape-YYYYMMDD.log` 末尾有 `Saved scrape snapshot`。  
-调试：`.\scripts\run_scrape.bat --headed --dry-run`
+Success: `logs\scrape-YYYYMMDD.log` ends with `Saved scrape snapshot`.  
+Debug: `.\scripts\run_scrape.bat --headed --dry-run`
 
-### 6) 注册定时（:10 / :30 / :50）
+### 6) Register schedule (:10 / :30 / :50)
 
 ```powershell
 cd "$HOME\Projects\Sorting Database"
 powershell -ExecutionPolicy Bypass -File .\scripts\register_scheduled_tasks.ps1
 ```
 
-任务名：`SortingDataScrape20Min-10` / `-30` / `-50`
+Task names: `SortingDataScrape20Min-10` / `-30` / `-50`
 
 ---
 
-## C. Windows：从 Git 同步最新代码（Mac push 之后）
+## C. Windows: pull after a Mac push
 
-在 **PowerShell** 里：
+In **PowerShell**:
 
 ```powershell
 cd "$HOME\Projects\Sorting Database"
@@ -101,62 +101,62 @@ git checkout main
 git pull origin main
 ```
 
-或一键脚本（同样是 pull + 检查 `.venv`）：
+Or:
 
 ```powershell
 cd "$HOME\Projects\Sorting Database"
 powershell -ExecutionPolicy Bypass -File .\scripts\pull_windows_updates.ps1
 ```
 
-若提示 `requirements.txt` 有变，再跑：
+If `requirements.txt` changed:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\setup_windows.ps1
 ```
 
-**不必**每次重装 Playwright。pull 之后下次 :10/:30/:50 自动用新代码。
+You usually do **not** need to reinstall Playwright. The next :10 / :30 / :50 run picks up the new code.
 
 ---
 
-## D. 跑起来之后的行为
+## D. Runtime behavior
 
-- 每小时 **:10 / :30 / :50** ET 各跑一次  
-- 每次写入 chute + feed  
-- **hourly**：只有当前未满小时会三次更新；整点结束后定稿一次不再改；中断恢复会补齐未定稿的完整小时  
-- Query 失败会重试 / 强制重登；整次失败 bat 再开一轮浏览器  
-- 上一轮还在跑 → skip（`logs\scrape.lock`；崩溃残留锁约 **15 分钟**后视为过期）  
-- UniMap 会话：`.uniuni-auth-state.json`
+- Each hour at **:10 / :30 / :50** ET  
+- Each run writes chute + feed  
+- **hourly**: current incomplete hour updates every scrape; after the hour ends it finalizes once; recovery backfills unfinished hours  
+- Query failures retry / force re-login; a full failure lets the bat start another browser pass  
+- Overlapping run → skip (`logs\scrape.lock`; stale lock expires after about **15 minutes**)  
+- UniMap session: `.uniuni-auth-state.json`
 
 **Batch**
 
-- **21:10 ET** → 只用已保存 batch，不打开 Slot Assignment  
-- **21:30 ET 起**直到 Slot `Batch No` 变化 → 每次打开 Slot 检查  
-  - 仍是旧的 → 继续用旧 batch，下次再查  
-  - 已变 → 用页面新 batch（D 晚上 → ops day D+1），之后停查直到下一个 21:30  
-- Slot 检查失败 → 未确认，后面还要再查  
-- 若错过 21:30 且本 ops day 未确认 → 白天也会继续查直到变化  
-- 手动：`.\scripts\run_scrape.bat --refresh-batch`
+- **19:10 ET** → saved batch only; do not open Slot Assignment  
+- **From 19:30 ET** until Slot `Batch No` changes → poll Slot each run  
+  - Still old → keep old batch, check again next run  
+  - Changed → use the page batch (evening of D → ops day D+1)  
+- From **23:10** watch for batch 2; from **06:10** watch for batch 3 (see scraper docs)  
+- Slot check failure → not confirmed; keep polling  
+- Manual: `.\scripts\run_scrape.bat --refresh-batch`
 
 ---
 
-## E. 日志与排查
+## E. Logs and troubleshooting
 
-| 位置 | 用途 |
-|------|------|
-| `logs\scrape-YYYYMMDD.log` | 每次 scrape 输出 |
-| 任务计划程序 → 历史记录 | 是否触发 |
-| `.\scripts\run_scrape.bat --headed` | 看 UniMap 卡在哪 |
+| Location | Use |
+|----------|-----|
+| `logs\scrape-YYYYMMDD.log` | Per-run output |
+| Task Scheduler → History | Whether the task fired |
+| `.\scripts\run_scrape.bat --headed` | See where UniMap stalls |
 
 - Overlap skip → exit code **2**  
-- 成功 → 日志末尾 `Saved scrape snapshot`  
-- 连续失败：确认没人共用 `nj600`；可删 `.uniuni-auth-state.json` 重登  
+- Success → log ends with `Saved scrape snapshot`  
+- Repeated failures: make sure nobody else shares `nj600`; delete `.uniuni-auth-state.json` to re-login  
 
 ---
 
-## F. 停用 Windows 定时（回退 Mac）
+## F. Stop Windows schedule (hand back to Mac)
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\unregister_scheduled_tasks.ps1
 ```
 
-然后在 Mac：`./scripts/install_mac_schedule.sh`
+Then on Mac: `./scripts/install_mac_schedule.sh`

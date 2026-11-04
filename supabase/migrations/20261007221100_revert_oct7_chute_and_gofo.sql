@@ -151,7 +151,7 @@ AS $$
 $$;
 
 COMMENT ON FUNCTION public.city_volume_series(text) IS
-  'City/hub series. Other cities: chute cumulative. RIC/ALB/SWF/SYR/PVD2: 21:30 Workflow 存量 + chute. Missed 21:30 opening scrape: chute only (later warehouse totals mix RIC+ORF and BOS+MHT+PVD1+PVD2).';
+  'City/hub series. Other cities: chute cumulative. RIC/ALB/SWF/SYR/PVD2: 21:30 Workflow opening stock + chute. Missed 21:30 opening scrape: chute only (later warehouse totals mix RIC+ORF and BOS+MHT+PVD1+PVD2).';
 
 GRANT EXECUTE ON FUNCTION public.city_volume_series(text) TO service_role, authenticated, anon;
 

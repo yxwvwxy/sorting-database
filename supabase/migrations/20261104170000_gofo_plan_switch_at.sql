@@ -1,6 +1,6 @@
 -- Mid-ops regular-plan cutovers store their clock in gofo_plan_switch.
 -- Ops day 2026-10-29 used 12:10 ET. Ops day 2026-11-05 uses the scrape time
--- when batch 3 is first seen (458隔口配置 ends / 458隔口-多细分1103 starts).
+-- when batch 3 is first seen (458-config ends / 458-multisplit-1103 starts).
 -- Until that 11/5 switch_at is recorded, same-day cut rows stay on the prior plan.
 
 CREATE TABLE IF NOT EXISTS public.gofo_plan_switch (
@@ -29,7 +29,7 @@ INSERT INTO public.gofo_plan_switch (ops_date, switch_at, note)
 VALUES (
   DATE '2026-10-29',
   (DATE '2026-10-29' + TIME '12:10') AT TIME ZONE 'America/New_York',
-  '458隔口配置 mid-day cutover'
+  '458-config mid-day cutover'
 )
 ON CONFLICT (ops_date) DO NOTHING;
 
@@ -67,7 +67,7 @@ BEGIN
     COALESCE(p_note, 'regular plan cutover')
   );
 
-  -- Chutes absent from 458隔口-多细分1103 end when that plan starts.
+  -- Chutes absent from 458-multisplit-1103 end when that plan starts.
   IF p_ops_date = DATE '2026-11-05' THEN
     UPDATE public.chute_destination_gofo
     SET end_date = p_ops_date

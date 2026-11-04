@@ -1,7 +1,7 @@
--- Workflow 存量 is valid only from the 21:30–21:49 ET opening scrape.
+-- Workflow opening stock is valid only from the 21:30–21:49 ET opening scrape.
 -- After that, RIC warehouse mixes RIC+ORF and BOS warehouse mixes
 -- BOS+MHT+PVD1+PVD2, so warehouse totals cannot map to RIC/PVD2.
--- Missed 21:30: 7pm five-city totals are chute/隔口 only.
+-- Missed 21:30: 7pm five-city totals are chute only.
 
 CREATE OR REPLACE FUNCTION public.city_volume_series(p_subbatch text DEFAULT NULL)
 RETURNS TABLE (
@@ -127,7 +127,7 @@ AS $$
 $$;
 
 COMMENT ON FUNCTION public.city_volume_series(text) IS
-  'City/hub series. Other cities: chute cumulative. RIC/ALB/SWF/SYR/PVD2: 21:30 Workflow 存量 + chute. Missed 21:30 opening scrape: chute only (later warehouse totals mix RIC+ORF and BOS+MHT+PVD1+PVD2).';
+  'City/hub series. Other cities: chute cumulative. RIC/ALB/SWF/SYR/PVD2: 21:30 Workflow opening stock + chute. Missed 21:30 opening scrape: chute only (later warehouse totals mix RIC+ORF and BOS+MHT+PVD1+PVD2).';
 
 GRANT EXECUTE ON FUNCTION public.city_volume_series(text) TO service_role, authenticated, anon;
 

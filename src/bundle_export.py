@@ -259,19 +259,19 @@ def format_shpt_summary(records: list[BundleRecord], *, batch: str, operation_da
     high.sort(key=lambda row: (-(row.shipment_count or 0), row.bundle_id))
 
     lines = [
-        f"集包件数汇总  批次 {batch}  运营日 {operation_date.isoformat()}",
-        f"本批次集包 {len(owned)} 行",
-        f"shipment < {LOW_SHIPMENTS}：{len(low)} 行",
-        f"shipment > {HIGH_SHIPMENTS}：{len(high)} 行",
+        f"Bundle summary  batch {batch}  ops day {operation_date.isoformat()}",
+        f"Bundles in this batch: {len(owned)} rows",
+        f"shipment < {LOW_SHIPMENTS}: {len(low)} rows",
+        f"shipment > {HIGH_SHIPMENTS}: {len(high)} rows",
     ]
     if unknown:
-        lines.append(f"shipment 不是整数：{len(unknown)} 行")
+        lines.append(f"shipment not an integer: {len(unknown)} rows")
     lines.append("")
 
     def add_block(title: str, rows: list[BundleRecord]) -> None:
         lines.append(title)
         if not rows:
-            lines.append("（无）")
+            lines.append("(none)")
             lines.append("")
             return
         for row in rows:
@@ -285,8 +285,8 @@ def format_shpt_summary(records: list[BundleRecord], *, batch: str, operation_da
             )
         lines.append("")
 
-    add_block(f"低于 {LOW_SHIPMENTS}", low)
-    add_block(f"高于 {HIGH_SHIPMENTS}", high)
+    add_block(f"Below {LOW_SHIPMENTS}", low)
+    add_block(f"Above {HIGH_SHIPMENTS}", high)
     return "\n".join(lines).rstrip() + "\n"
 
 

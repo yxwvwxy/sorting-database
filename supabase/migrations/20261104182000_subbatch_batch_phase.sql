@@ -21,7 +21,7 @@ ALTER TABLE public.subbatch
 COMMENT ON COLUMN public.subbatch.batch_phase IS
   '1 = evening regular, 2 = mid-night resort_by_route, 3 = morning regular. Null for pre-three-batch scrapes.';
 COMMENT ON COLUMN public.subbatch.plan_kind IS
-  'regular for batch 1/3; resort_by_route for batch 2 (UniMap 二次分拣细分).';
+  'regular for batch 1/3; resort_by_route for batch 2 (UniMap secondary-split (resort_by_route)).';
 
 DROP FUNCTION IF EXISTS public.save_scrape_snapshot(text, integer, date, timestamptz, jsonb, jsonb, jsonb);
 

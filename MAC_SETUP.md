@@ -1,26 +1,26 @@
-# macOS：改代码（Windows 跑定时）
+# macOS: edit code (Windows runs the schedule)
 
-**Windows** 跑 :10/:30/:50 scrape；**Mac** 只编辑 + git push。
+**Windows** runs the :10 / :30 / :50 scrapes. **Mac** only edits and `git push`.
 
-Mac 路径：`~/Projects/Sorting Database`
+Mac path: `~/Projects/Sorting Database`
 
 ---
 
-## 日常同步
+## Day-to-day sync
 
-### Mac 推送
+### Mac push
 
 ```bash
 cd ~/Projects/Sorting\ Database
 git checkout main
 git pull origin main
-# …改代码…
+# …edit…
 git add -A
 git commit -m "your message"
 git push origin main
 ```
 
-### Windows 拉取（另一台）
+### Windows pull (other machine)
 
 ```powershell
 cd "$HOME\Projects\Sorting Database"
@@ -28,17 +28,17 @@ git checkout main
 git pull origin main
 ```
 
-或：
+Or:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\pull_windows_updates.ps1
 ```
 
-完整 Windows 说明：[WINDOWS_SETUP.md](WINDOWS_SETUP.md)
+Full Windows guide: [WINDOWS_SETUP.md](WINDOWS_SETUP.md)
 
 ---
 
-## 停掉 Mac 定时
+## Uninstall Mac schedule
 
 ```bash
 cd ~/Projects/Sorting\ Database
@@ -47,12 +47,12 @@ cd ~/Projects/Sorting\ Database
 
 ---
 
-## 可选：Mac 自己当 scrape 备份机
+## Optional: Mac as scrape backup
 
-一般不需要。同一时间只开一台定时。
+Usually not needed. Only one machine should run the schedule at a time.
 
 ```bash
 chmod +x scripts/*.sh
 ./scripts/install_mac_schedule.sh
-./scripts/run_scrape.sh   # 试跑
+./scripts/run_scrape.sh   # dry run
 ```

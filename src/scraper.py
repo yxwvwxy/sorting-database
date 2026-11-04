@@ -15,7 +15,10 @@ from .config import ET, Settings, SubbatchJob
 
 ANALYSIS_URL = "https://dispatch.uniuni.com/sorting-production-analysis"
 QUERY_LOG_PATTERN = re.compile(r"^query log$", re.I)
-DOWNLOAD_CHART_PATTERN = re.compile(r"download chart data|下载图表数据", re.I)
+DOWNLOAD_CHART_PATTERN = re.compile(
+    "download chart data|\u4e0b\u8f7d\u56fe\u8868\u6570\u636e",
+    re.I,
+)
 FEED_STATION_ORDER = [
     "Upper station 1",
     "Upper station 2",
@@ -62,7 +65,9 @@ def _has_query_log_button(target: Page | Frame) -> bool:
     query_button = target.locator("button").filter(has_text=QUERY_LOG_PATTERN)
     if query_button.count() > 0:
         return True
-    return target.get_by_role("button", name=re.compile(r"查询日志|query log", re.I)).count() > 0
+    return target.get_by_role(
+        "button", name=re.compile("\u67e5\u8be2\u65e5\u5fd7|query log", re.I)
+    ).count() > 0
 
 
 def _analysis_target(page: Page) -> Page | Frame:
@@ -93,7 +98,7 @@ def _dismiss_portal_dialogs(page: Page) -> None:
     """Close UniMap release-note / modal dialogs that block clicks."""
     page.evaluate(
         """() => {
-          const re = /got it|^ok$|^close$|确认|确定|关闭|知道了/i;
+          const re = /got it|^ok$|^close$|\u786e\u8ba4|\u786e\u5b9a|\u5173\u95ed|\u77e5\u9053\u4e86/i;
           for (const button of document.querySelectorAll('button')) {
             const text = (button.innerText || '').trim();
             if (re.test(text)) {
@@ -331,7 +336,9 @@ def _analysis_ready(page: Page) -> bool:
         return False
     if target.locator("input").count() >= 2:
         return True
-    return target.get_by_role("textbox", name=re.compile(r"批次号|batch numbers", re.I)).count() > 0
+    return target.get_by_role(
+        "textbox", name=re.compile("\u6279\u6b21\u53f7|batch numbers", re.I)
+    ).count() > 0
 
 
 def _open_sorting_production_analysis(page: Page) -> None:
@@ -392,8 +399,12 @@ def _ensure_logged_in_and_open_analysis(page: Page, settings: Settings) -> None:
 
 
 def _fill_analysis_inputs(target: Page | Frame, job: SubbatchJob) -> None:
-    batch_input = target.get_by_role("textbox", name=re.compile(r"批次号|batch numbers", re.I))
-    machine_input = target.get_by_role("textbox", name=re.compile(r"机器编号|machine numbers", re.I))
+    batch_input = target.get_by_role(
+        "textbox", name=re.compile("\u6279\u6b21\u53f7|batch numbers", re.I)
+    )
+    machine_input = target.get_by_role(
+        "textbox", name=re.compile("\u673a\u5668\u7f16\u53f7|machine numbers", re.I)
+    )
     if batch_input.count() and machine_input.count():
         batch_input.first.fill(job.subbatch)
         machine_input.first.fill(str(job.machine_id))
@@ -416,7 +427,9 @@ def _click_query_log(target: Page | Frame, page: Page) -> None:
 
     query_button = target.locator("button").filter(has_text=QUERY_LOG_PATTERN)
     if query_button.count() == 0:
-        query_button = target.get_by_role("button", name=re.compile(r"查询日志|query log", re.I))
+        query_button = target.get_by_role(
+            "button", name=re.compile("\u67e5\u8be2\u65e5\u5fd7|query log", re.I)
+        )
 
     _dismiss_portal_dialogs(page)
     query_button.first.click(force=True)
@@ -519,7 +532,10 @@ def _parse_hourly_csv_text(raw: str, operation_date: date) -> list[HourlyRow]:
 def _download_hourly_csv(page: Page, operation_date: date) -> list[HourlyRow]:
     download_button = page.locator("button").filter(has_text=DOWNLOAD_CHART_PATTERN)
     if download_button.count() == 0:
-        download_link = page.get_by_role("link", name=re.compile(r"下载图表数据|download chart data", re.I))
+        download_link = page.get_by_role(
+            "link",
+            name=re.compile("\u4e0b\u8f7d\u56fe\u8868\u6570\u636e|download chart data", re.I),
+        )
         href = download_link.get_attribute("href") if download_link.count() else None
         if href and href.startswith("data:"):
             import base64

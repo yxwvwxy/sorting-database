@@ -1,4 +1,4 @@
--- Plan 458隔口配置. Takes effect after 12:10 ET on ops day 2026-10-29.
+-- Plan 458-config. Takes effect after 12:10 ET on ops day 2026-10-29.
 -- Prior open rows already end_date = 2026-10-29 (morning still uses them).
 -- New 5/6-digit chute ids are left/right splits of the physical slot.
 

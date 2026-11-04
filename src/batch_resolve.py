@@ -13,12 +13,12 @@ Agreed ops rules (America/New_York):
     scrapes batch 2 one last time and batch 3 for the first time; then stop
     Slot checks until the next evening open.
 - Batches 1 and 3 use the regular chute plan. Batch 2 uses the secondary-
-  split（二次细分）plan (EWR.H destinations only; re-sorts EWR.H multi-route
+  split (secondary-split) plan (EWR.H destinations only; re-sorts EWR.H multi-route
   volume from this ops day's batch 1 plus the prior ops day's batch 3).
   Dashboard still follows the regular plan for now; batch 2 volumes are
   scraped under their Batch No. From batch 3 of ops day 2026-11-05 onward
-  the regular plan is `458隔口-多细分1103`; until that morning batch 3 opens,
-  regular remains `458隔口配置`.
+  the regular plan is `458-multisplit-1103`; until that morning batch 3 opens,
+  regular remains `458-config`.
 - 19:10 (19:00-19:29): never open Slot Assignment; use the saved batch.
   On an early-switch date that closing slot is one hour earlier.
 - From 19:30 until Slot Batch No leaves the pre-switch value, every run
@@ -72,7 +72,7 @@ class ResolveResult:
 
     jobs: tuple[SubbatchJob, ...]
     # After scraping jobs[0] (closing batch) and before jobs[1], record the
-    # regular-plan cutover clock (11/5 batch 3: 458隔口配置 → 458隔口-多细分1103).
+    # regular-plan cutover clock (11/5 batch 3: 458-config → 458-multisplit-1103).
     regular_plan_switch: bool = False
 
     @property
@@ -361,7 +361,7 @@ def _resolve_from_slot_assignment(
             if plan_switch:
                 print(
                     "Will record regular-plan cutover clock after the closing-batch "
-                    "scrape (458隔口配置 end / 458隔口-多细分1103 start)."
+                    "scrape (458-config end / 458-multisplit-1103 start)."
                 )
             return ResolveResult(
                 jobs=(old_job, new_job),
