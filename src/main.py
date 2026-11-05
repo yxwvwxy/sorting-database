@@ -298,8 +298,8 @@ def main(argv: list[str] | None = None) -> int:
                 return 1
             summaries.append(summary)
 
-            # After batch 2's last scrape on the discovery run, stamp the
-            # regular-plan cutover so batch 3's first scrape uses 1103.
+            # After B's last scrape on the discovery run, stamp the
+            # regular-plan cutover so C's first scrape uses 第一次分拣模版1103.
             if (
                 resolved.regular_plan_switch
                 and index == 0
@@ -312,14 +312,14 @@ def main(argv: list[str] | None = None) -> int:
                     job.operation_date,
                     switch_at,
                     note=(
-                        "458-config → 458-multisplit-1103 "
-                        f"(batch 3 open, ops {job.operation_date.isoformat()})"
+                        "458-config → 第一次分拣模版1103 "
+                        f"(C segment open, ops {job.operation_date.isoformat()})"
                     ),
                 )
                 print(
                     f"Recorded regular-plan switch_at={recorded.isoformat()} "
                     f"for ops {job.operation_date} "
-                    "(458-config end / 458-multisplit-1103 start)."
+                    "(458-config end / 第一次分拣模版1103 start)."
                 )
 
     if len(summaries) > 1:

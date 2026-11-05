@@ -155,8 +155,9 @@ def _batch_label(row) -> str:
         has_phase = False
         phase_i = None
     if has_phase:
+        segment = {1: "A", 2: "B", 3: "C"}.get(phase_i, str(phase_i))
         return (
-            f"{row.subbatch_date} · #{phase_i} · {row.subbatch} · "
+            f"{row.subbatch_date} · {segment} · {row.subbatch} · "
             f"{row.scrape_count} snaps · {row.latest_total:,}"
         )
     return (

@@ -2,23 +2,23 @@
 
 Agreed ops rules (America/New_York):
 
-- Each ops day uses three batches.
-  - Batch 1 opens at the evening switch (normally 19:30).
+- Each ops day uses three segments: A, B, C (batch_phase 1, 2, 3).
+  - A opens at the evening switch (normally 19:30).
   - From 23:10, every scrape opens Slot Assignment until Batch No leaves
-    batch 1. If unchanged, keep scraping batch 1. When it changes (e.g. 01:30),
-    that run scrapes batch 1 one last time and batch 2 for the first time;
-    then stop Slot checks until the morning watch.
-  - From 06:10, every scrape opens Slot until Batch No leaves batch 2. If
-    unchanged, keep scraping batch 2. When it changes (e.g. 06:50), that run
-    scrapes batch 2 one last time and batch 3 for the first time; then stop
-    Slot checks until the next evening open.
-- Batches 1 and 3 use the regular chute plan. Batch 2 uses the secondary-
-  split (secondary-split) plan (EWR.H destinations only; re-sorts EWR.H multi-route
-  volume from this ops day's batch 1 plus the prior ops day's batch 3).
-  Dashboard still follows the regular plan for now; batch 2 volumes are
-  scraped under their Batch No. From batch 3 of ops day 2026-11-05 onward
-  the regular plan is `458-multisplit-1103`; until that morning batch 3 opens,
-  regular remains `458-config`.
+    A. If unchanged, keep scraping A. When it changes, that run scrapes A
+    one last time and B for the first time; then stop Slot checks until
+    the morning watch.
+  - From 06:10, every scrape opens Slot until Batch No leaves B. If
+    unchanged, keep scraping B. When it changes, that run scrapes B one
+    last time and C for the first time; then stop Slot checks until the
+    next evening open.
+- A and C use the regular chute plan. B uses the secondary-split plan
+  (EWR.H destinations only; re-sorts EWR.H multi-route volume from this
+  ops day's A plus the prior ops day's C). Dashboard still follows the
+  regular plan for now; B volumes are scraped under their Batch No.
+  From the first stored C scrape of ops day 2026-11-05 (09:10:16 ET)
+  the regular plan is `第一次分拣模版1103`; until that capture, regular
+  remains `458-config`.
 - 19:10 (19:00-19:29): never open Slot Assignment; use the saved batch.
   On an early-switch date that closing slot is one hour earlier.
 - From 19:30 until Slot Batch No leaves the pre-switch value, every run
@@ -72,7 +72,7 @@ class ResolveResult:
 
     jobs: tuple[SubbatchJob, ...]
     # After scraping jobs[0] (closing batch) and before jobs[1], record the
-    # regular-plan cutover clock (11/5 batch 3: 458-config → 458-multisplit-1103).
+    # regular-plan cutover clock (11/5 C: 458-config → 第一次分拣模版1103).
     regular_plan_switch: bool = False
 
     @property
@@ -361,7 +361,7 @@ def _resolve_from_slot_assignment(
             if plan_switch:
                 print(
                     "Will record regular-plan cutover clock after the closing-batch "
-                    "scrape (458-config end / 458-multisplit-1103 start)."
+                    "scrape (458-config end / 第一次分拣模版1103 start)."
                 )
             return ResolveResult(
                 jobs=(old_job, new_job),

@@ -760,8 +760,9 @@
     const $ = (id) => document.getElementById(id);
     const fmt = (n) => Number(n || 0).toLocaleString("en-US");
     const batchOptionLabel = (b) => {
-      const phase = b.batch_phase != null && b.batch_phase !== ""
-        ? ` · #${b.batch_phase}`
+      const PHASE = { 1: "A", 2: "B", 3: "C" };
+      const phase = b.batch_phase != null && PHASE[b.batch_phase]
+        ? ` · ${PHASE[b.batch_phase]}`
         : "";
       return `${b.subbatch_date}${phase} · ${b.subbatch} · ${b.scrape_count} snaps · ${fmt(b.latest_total)}`;
     };
