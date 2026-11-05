@@ -636,9 +636,11 @@
       <p class="caption">JFK175 volume is under JFK/PWM (7pm outbound). Open Details on the JFK tile for each city and for a chute that holds more than one city. PWM is its own tile.</p>
       <p class="caption">Bundle count follows the selected batch. A bundle is counted once if it was created during that ops day, through the batch's latest chute scrape. It still counts after it ships or arrives. Uni hub tiles follow the destination warehouse. EWR, BWI, JFK, and PWM follow the area.</p>
       <div id="gofo-tiles" class="city-modules"></div>
+      <div id="gofo-growth">
       <h2 style="margin-top:1.35rem">Growth chart</h2>
       <p id="gofo-chart-caption" class="caption">Showing JFK, PWM</p>
       <div class="panel"><div id="gofo-chart"></div></div>
+      </div>
       <h2 style="margin-top:1.35rem">Chute count</h2>
       <div id="gofo-chute-counts"></div>
     </section>
@@ -753,7 +755,8 @@
       ...CITY_ROLLED_PARTS,
     ]);
     const CITY_CHART_DEFAULT = ["EWR", "CT", "AT"];
-    const CITY_HUB_LAST_OPS_DAY = "2026-10-16";
+    const CITY_HUB_OPS_DAY = "2026-09-05";
+    const SEGMENT_FROM = "2026-11-05";
     const GOFO_FIRST_OPS_DAY = "2026-10-18";
 
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -761,9 +764,8 @@
     const fmt = (n) => Number(n || 0).toLocaleString("en-US");
     const batchOptionLabel = (b) => {
       const PHASE = { 1: "A", 2: "B", 3: "C" };
-      const phase = b.batch_phase != null && PHASE[b.batch_phase]
-        ? ` · ${PHASE[b.batch_phase]}`
-        : "";
+      const segmented = String(b.subbatch_date || "") >= SEGMENT_FROM && PHASE[b.batch_phase];
+      const phase = segmented ? ` · #${PHASE[b.batch_phase]}` : "";
       return `${b.subbatch_date}${phase} · ${b.subbatch} · ${b.scrape_count} snaps · ${fmt(b.latest_total)}`;
     };
 
@@ -782,6 +784,7 @@
     let gofoChartModel = { series: [], cities: [] };
     let gofoChartSelection = [];
     let gofoChartDefault = [];
+    let gofoResortMode = false;
     let gofoUniPartLatest = [];
     let gofoJfkPartLatest = [];
     let activeTab = "gofo";
@@ -1402,10 +1405,10 @@
 
     async function loadBatchesInto(selectId, storeKey) {
       const cutoff = etDaysAgoYmd(6);
-      const all = await rpc("list_scrape_batches", { p_limit: 100 });
+      const all = await rpc("list_scrape_batches", { p_limit: storeKey === "city" ? 500 : 100 });
       let filtered = all.filter((b) => String(b.subbatch_date || "") >= cutoff);
       if (storeKey === "city") {
-        filtered = filtered.filter((b) => String(b.subbatch_date || "") <= CITY_HUB_LAST_OPS_DAY);
+        filtered = all.filter((b) => String(b.subbatch_date || "") === CITY_HUB_OPS_DAY);
       }
       if (storeKey === "city") batches = filtered;
       else feedBatches = filtered;
@@ -1425,7 +1428,7 @@
     async function loadCitySeries() {
       showError("error", null);
       const batch = batches[Number($("batch").value)];
-      if (!batch || String(batch.subbatch_date || "") > CITY_HUB_LAST_OPS_DAY) return;
+      if (!batch || String(batch.subbatch_date || "") !== CITY_HUB_OPS_DAY) return;
       renderMeta(batch, "meta");
       let series = await rpc("city_volume_series", { p_subbatch: batch.subbatch });
       series = series.filter((r) => r.city !== "Unmapped");
@@ -1946,6 +1949,21 @@
     }
 
     function renderGofoTiles(latestRows, mixedRows) {
+      if (gofoResortMode) {
+        const rows = latestRows
+          .filter((r) => r.section === "ewr_one")
+          .sort((a, b) => a.code.localeCompare(b.code));
+        const volume = rows.reduce((sum, r) => sum + Number(r.total_volume || 0), 0);
+        const body = rows.map((r) => tileHtml(
+          r.code, r.total_volume, r.delta_volume, null, [], r.city, [], null
+        )).join("");
+        $("gofo-tiles").innerHTML = `
+          <div class="city-module">
+            <p class="city-module-title">EWR.H · one route - ${fmt(volume)}</p>
+            <div class="grid">${body}</div>
+          </div>`;
+        return;
+      }
       const mixed = mixedRows || [];
       const jfkMixed = mixed.filter((r) => r.warehouse === "JFK175");
       const rejectRow = mixed.find((r) => Number(r.chute_id) === 118);
@@ -2057,7 +2075,7 @@
     }
 
     function onGofoTileActivate(city) {
-      if (!city) return;
+      if (!city || gofoResortMode) return;
       if (gofoChartSelection.length === 1 && gofoChartSelection[0] === city) {
         gofoChartSelection = gofoChartDefault.slice();
       } else {
@@ -2111,6 +2129,18 @@
     function renderGofoChuteCounts(rows) {
       const host = $("gofo-chute-counts");
       if (!host) return;
+      if (gofoResortMode) {
+        const count = chuteSectionCount(rows, "ewr_one");
+        host.innerHTML = `
+          <table class="bundle-table chute-count-table">
+            <thead><tr><th>Dest. warehouse</th><th>Chute count</th></tr></thead>
+            <tbody>
+              <tr><th>EWR.H one route</th><td>${fmt(count)}</td></tr>
+              <tr class="total"><th>Total</th><td>${fmt(count)}</td></tr>
+            </tbody>
+          </table>`;
+        return;
+      }
       const open = new Set(
         [...host.querySelectorAll(".chute-toggle[aria-expanded='true']")].map((button) => button.dataset.code)
       );
@@ -2156,11 +2186,38 @@
       }).join("");
     }
 
+    function setGofoGrowthVisible(on) {
+      const block = $("gofo-growth");
+      if (block) block.classList.toggle("hidden", !on);
+      if (!on) Plotly.purge("gofo-chart");
+    }
+
     async function loadGofoSeries() {
       showError("gofo-error", null);
       const batch = gofoBatches[Number($("gofo-batch").value)];
       if (!batch || String(batch.subbatch_date || "") < GOFO_FIRST_OPS_DAY) return;
+      gofoResortMode = String(batch.subbatch_date || "") >= SEGMENT_FROM && Number(batch.batch_phase) === 2;
+      setGofoGrowthVisible(!gofoResortMode);
       renderMeta(batch, "gofo-meta");
+      if (gofoResortMode) {
+        const [seriesRaw, chuteRows] = await Promise.all([
+          rpc("gofo_resort_city_volume_series", { p_subbatch: batch.subbatch }),
+          rpc("gofo_resort_chute_counts", { p_operation_date: batch.subbatch_date }),
+        ]);
+        rememberBundleCounts([]);
+        renderGofoChuteCounts(chuteRows);
+        const series = (seriesRaw || [])
+          .filter((r) => r.city && r.section)
+          .map((r) => ({ ...r, code: r.city, city: `${r.section}|${r.city}` }));
+        if (!series.length) {
+          $("gofo-tiles").innerHTML = "";
+          showError("gofo-error", new Error("No EWR.H one-route rows for this B segment."));
+          return;
+        }
+        const latestTs = series.reduce((m, r) => (r.scraped_at > m ? r.scraped_at : m), series[0].scraped_at);
+        renderGofoTiles(series.filter((r) => r.scraped_at === latestTs), []);
+        return;
+      }
       let [series, mixed, bundleRows, chuteRows] = await Promise.all([
         rpc("gofo_city_volume_series", { p_subbatch: batch.subbatch }),
         rpc("gofo_mixed_chutes", { p_subbatch: batch.subbatch }),

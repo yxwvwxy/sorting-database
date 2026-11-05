@@ -12,13 +12,15 @@ Agreed ops rules (America/New_York):
     unchanged, keep scraping B. When it changes, that run scrapes B one
     last time and C for the first time; then stop Slot checks until the
     next evening open.
-- A and C use the regular chute plan. B uses the secondary-split plan
-  (EWR.H destinations only; re-sorts EWR.H multi-route volume from this
-  ops day's A plus the prior ops day's C). Dashboard still follows the
-  regular plan for now; B volumes are scraped under their Batch No.
-  From the first stored C scrape of ops day 2026-11-05 (09:10:16 ET)
-  the regular plan is `第一次分拣模版1103`; until that capture, regular
-  remains `458-config`.
+- A and C use the regular chute plan. B is the only segment that uses
+  the secondary-split plan `二次分拣模版1105` (EWR.H by_route; re-sorts
+  EWR.H multi-route volume from this ops day's A plus the prior ops day's C).
+  That plan starts at the first stored B scrape of ops day 2026-11-05
+  (03:10:14 ET) and is kept in chute_destination_resort, not the regular map.
+  Dashboard still follows the regular plan for now; B volumes are scraped
+  under their Batch No. From the first stored C scrape of ops day 2026-11-05
+  (09:10:16 ET) the regular plan is `第一次分拣模版1103`; until that capture,
+  regular remains `458-config`.
 - 19:10 (19:00-19:29): never open Slot Assignment; use the saved batch.
   On an early-switch date that closing slot is one hour earlier.
 - From 19:30 until Slot Batch No leaves the pre-switch value, every run

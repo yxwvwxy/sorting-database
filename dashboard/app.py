@@ -154,10 +154,10 @@ def _batch_label(row) -> str:
     except (TypeError, ValueError):
         has_phase = False
         phase_i = None
-    if has_phase:
+    if has_phase and str(row.subbatch_date) >= "2026-11-05":
         segment = {1: "A", 2: "B", 3: "C"}.get(phase_i, str(phase_i))
         return (
-            f"{row.subbatch_date} · {segment} · {row.subbatch} · "
+            f"{row.subbatch_date} · #{segment} · {row.subbatch} · "
             f"{row.scrape_count} snaps · {row.latest_total:,}"
         )
     return (
