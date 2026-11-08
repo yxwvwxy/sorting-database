@@ -1993,19 +1993,36 @@
       }));
     }
 
+    function renderEwrPhysicalGrids(rows, tileFn) {
+      const groups = [
+        { label: "EWR.H-400", rows: [] },
+        { label: "EWR.H-1160", rows: [] },
+      ];
+      for (const r of rows) {
+        (EWR_PHYSICAL_400.has(r.code) ? groups[0] : groups[1]).rows.push(r);
+      }
+      return groups
+        .filter((g) => g.rows.length)
+        .map((g) => {
+          g.rows.sort((a, b) => a.code.localeCompare(b.code));
+          const volume = g.rows.reduce((sum, r) => sum + Number(r.total_volume || 0), 0);
+          const body = g.rows.map(tileFn).join("");
+          return `<p class="city-module-title plain">${g.label} - ${fmt(volume)}</p><div class="grid">${body}</div>`;
+        })
+        .join("");
+    }
+
     function renderGofoTiles(latestRows, mixedRows) {
       if (gofoResortMode) {
-        const rows = latestRows
-          .filter((r) => r.section === "ewr_one")
-          .sort((a, b) => a.code.localeCompare(b.code));
+        const rows = latestRows.filter((r) => r.section === "ewr_one");
         const volume = rows.reduce((sum, r) => sum + Number(r.total_volume || 0), 0);
-        const body = rows.map((r) => tileHtml(
+        const grids = renderEwrPhysicalGrids(rows, (r) => tileHtml(
           r.code, r.total_volume, r.delta_volume, null, [], r.city, [], null
-        )).join("");
+        ));
         $("gofo-tiles").innerHTML = `
           <div class="city-module">
             <p class="city-module-title">EWR.H · one route - ${fmt(volume)}</p>
-            <div class="grid">${body}</div>
+            ${grids}
           </div>`;
         return;
       }
@@ -2034,8 +2051,14 @@
         const ewrLine = key === "ewr_one"
           ? `<p class="city-module-title plain">EWR.H (9am-11pm outbound) - ${fmt(ewrTotal)} Bundle count: ${fmt(ewrBundles)}</p>`
           : "";
+        if (key === "ewr_one" || key === "ewr_multi") {
+          const grids = renderEwrPhysicalGrids(rows, (r) => tileHtml(
+            r.code, r.total_volume, r.delta_volume, null, gofoChartSelection, r.city, [], null
+          ));
+          return `<div class="city-module">${ewrLine}<p class="${titleClass}">${title}</p>${grids}</div>`;
+        }
         const body = rows.map((r) => {
-          const bundleCount = r.section === "bwi" || r.section === "ewr_one" || r.section === "ewr_multi"
+          const bundleCount = r.section === "bwi"
             ? null
             : bundleCountFor(r.section, [r.code]);
           if (r.section === "uni_hub" && GOFO_ROLLUP[r.code]) {
