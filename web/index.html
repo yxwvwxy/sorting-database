@@ -638,7 +638,7 @@
       <div id="gofo-tiles" class="city-modules"></div>
       <div id="gofo-growth">
       <h2 style="margin-top:1.35rem">Growth chart</h2>
-      <p id="gofo-chart-caption" class="caption">Showing JFK, PWM</p>
+      <p id="gofo-chart-caption" class="caption">Showing BWI.H-709, EWR.H-400, EWR.H-1160</p>
       <div class="panel"><div id="gofo-chart"></div></div>
       </div>
       <h2 style="margin-top:1.35rem">Chute count</h2>
@@ -757,7 +757,12 @@
     const CITY_CHART_DEFAULT = ["EWR", "CT", "AT"];
     const CITY_HUB_OPS_DAY = "2026-09-05";
     const SEGMENT_FROM = "2026-11-05";
+    const PHYSICAL_WH_FROM = "2026-11-08";
     const GOFO_FIRST_OPS_DAY = "2026-10-18";
+    const EWR_PHYSICAL_400 = new Set([
+      "BOS", "MHT", "HYA", "ALB", "BUF", "ERI", "PIT", "ROC", "ORH", "LDJ", "SYR",
+    ]);
+    const PHYSICAL_WH_DEFAULT = ["BWI.H-709", "EWR.H-400", "EWR.H-1160"];
 
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     const $ = (id) => document.getElementById(id);
@@ -1784,6 +1789,7 @@
       jfk_pwm: "JFK/PWM",
       ewr_one: "EWR one route",
       ewr_multi: "EWR multi",
+      physical: "physical WH",
     };
 
     const GOFO_ROLLUP = {
@@ -1855,7 +1861,46 @@
       ];
     }
 
-    function gofoDefaultCities(latestRows) {
+    function physicalWarehouseFor(section, cityCode, opsDate) {
+      if (section === "bwi") return "BWI.H-709";
+      if (section !== "ewr_one" && section !== "ewr_multi") return null;
+      if (String(opsDate || "") < PHYSICAL_WH_FROM) return "EWR.H-500";
+      return EWR_PHYSICAL_400.has(cityCode) ? "EWR.H-400" : "EWR.H-1160";
+    }
+
+    function rollupPhysicalSeries(series, opsDate) {
+      const byKey = new Map();
+      for (const r of series) {
+        const wh = physicalWarehouseFor(r.section, r.code, opsDate);
+        if (!wh) continue;
+        const key = `${r.scraped_at}|${wh}`;
+        let row = byKey.get(key);
+        if (!row) {
+          row = {
+            subbatch: r.subbatch,
+            subbatch_date: r.subbatch_date,
+            scraped_at: r.scraped_at,
+            section: "physical",
+            code: wh,
+            city: `physical|${wh}`,
+            total_volume: 0,
+            delta_volume: 0,
+          };
+          byKey.set(key, row);
+        }
+        row.total_volume += Number(r.total_volume || 0);
+        row.delta_volume += Number(r.delta_volume || 0);
+      }
+      return [...series, ...byKey.values()];
+    }
+
+    function gofoDefaultCities(latestRows, opsDate) {
+      if (String(opsDate || "") >= PHYSICAL_WH_FROM) {
+        return PHYSICAL_WH_DEFAULT
+          .map((code) => latestRows.find((r) => r.section === "physical" && r.code === code))
+          .filter(Boolean)
+          .map((r) => r.city);
+      }
       return ["JFK", "PWM"]
         .map((code) => latestRows.find((r) => r.section === "jfk_pwm" && r.code === code))
         .filter(Boolean)
@@ -2246,13 +2291,16 @@
       const latestRaw = series.filter((r) => r.scraped_at === latestTs);
       gofoUniPartLatest = latestRaw.filter((r) => r.section === "uni_hub");
       gofoJfkPartLatest = latestRaw.filter((r) => r.section === "jfk_pwm" && r.code !== "PWM");
-      series = rollupJfkSeries(rollupGofoSeries(series));
+      series = rollupPhysicalSeries(
+        rollupJfkSeries(rollupGofoSeries(series)),
+        batch.subbatch_date
+      );
       const latest = series.filter((r) => r.scraped_at === latestTs);
       const cities = [...new Set(series.map((r) => r.city))].sort((a, b) => a.localeCompare(b));
       gofoChartModel = { series, cities };
-      gofoChartDefault = gofoDefaultCities(latest);
+      gofoChartDefault = gofoDefaultCities(latest, batch.subbatch_date);
       gofoChartSelection = gofoChartDefault.slice();
-      renderGofoTiles(latest, mixed);
+      renderGofoTiles(latest.filter((r) => r.section !== "physical"), mixed);
       applyGofoChart();
     }
 
