@@ -27,8 +27,6 @@ from playwright.sync_api import Page
 from .batch_state import load_batch_state
 from .config import (
     ET,
-    OPS_SWITCH_HOUR,
-    OPS_SWITCH_MINUTE,
     Settings,
     validate_supabase_settings,
     validate_uniuni_login_settings,
@@ -116,7 +114,8 @@ def is_unimap_day_closing_slot(slot: datetime) -> bool:
         return False
     if _on_daylight_time(current):
         return current.hour == 20
-    return current.hour == OPS_SWITCH_HOUR and current.minute < OPS_SWITCH_MINUTE
+    # UniMap generated-date closes at 19:00 EST; independent of ops-day open.
+    return current.hour == 19 and current.minute < 30
 
 
 def _boundary_hour(moment: datetime) -> int:

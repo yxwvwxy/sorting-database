@@ -3,7 +3,7 @@
 Agreed ops rules (America/New_York):
 
 - Each ops day uses three segments: A, B, C (batch_phase 1, 2, 3).
-  - A opens at the evening switch (normally 19:30).
+  - A opens at the ops-day switch (16:30 ET from 2026-11-10; was 19:30).
   - From 23:10, every scrape opens Slot Assignment until Batch No leaves
     A. If unchanged, keep scraping A. When it changes, that run scrapes A
     one last time and B for the first time; then stop Slot checks until
@@ -11,7 +11,7 @@ Agreed ops rules (America/New_York):
   - From 06:10, every scrape opens Slot until Batch No leaves B. If
     unchanged, keep scraping B. When it changes, that run scrapes B one
     last time and C for the first time; then stop Slot checks until the
-    next evening open.
+    next ops-day open. C's last scrape is 16:10 (closing slot).
 - A and C use the regular chute plan. B is the only segment that uses
   the secondary-split plan `二次分拣模版1105` (EWR.H by_route; re-sorts
   EWR.H multi-route volume from this ops day's A plus the prior ops day's C).
@@ -21,10 +21,12 @@ Agreed ops rules (America/New_York):
   under their Batch No. From the first stored C scrape of ops day 2026-11-05
   (09:10:16 ET) the regular plan is `第一次分拣模版1103`; until that capture,
   regular remains `458-config`.
-- 19:10 (19:00-19:29): never open Slot Assignment; use the saved batch.
-  On an early-switch date that closing slot is one hour earlier.
-- From 19:30 until Slot Batch No leaves the pre-switch value, every run
-  opens Slot Assignment (early-switch evenings start at 18:30 / 17:30).
+- Closing slot (16:00-16:29 from 2026-11-10; was 19:00-19:29): never open
+  Slot Assignment; use the saved batch. On an early-switch date that
+  closing slot is one hour earlier.
+- From the ops-day open (16:30 from 2026-11-10) until Slot Batch No leaves
+  the pre-switch value, every run opens Slot Assignment (early-switch
+  evenings start at 18:30 / 17:30).
 - If a Slot check fails, the next run must try again (do not mark confirmed).
 - --refresh-batch adopts the live page Batch No outside the wait loop.
 """
@@ -83,11 +85,10 @@ class ResolveResult:
 
 
 def switch_window_operation_date(now: datetime | None = None) -> date:
-    """Ops date for the active post-19:30 switch window.
+    """Ops date for the active post-open switch window.
 
-    Aug 5 19:30 -> Aug 6
-    Aug 6 01:10 (still waiting) -> Aug 6
-    Aug 6 19:30 -> Aug 7
+    From 2026-11-10: Nov 10 16:30 -> Nov 11; Nov 11 01:10 -> Nov 11.
+    Earlier evenings used 19:30 the same way.
     """
     current = _as_eastern(now)
     if new_ops_window_started(current):
@@ -107,18 +108,18 @@ def window_batch1_confirmed(state: BatchState | None, window_ops: date) -> bool:
 
 
 def in_batch2_watch_window(now: datetime | None = None) -> bool:
-    """From 23:10 ET through the rest of the ops day (past midnight) until 19:10."""
+    """From 23:10 ET through the rest of the ops day until the closing slot."""
     current = _as_eastern(now)
     if new_ops_window_started(current):
         return current.hour > BATCH2_WATCH_HOUR or (
             current.hour == BATCH2_WATCH_HOUR and current.minute >= BATCH2_WATCH_MINUTE
         )
-    # After midnight until the evening close: still the same ops day.
+    # After midnight until the ops-day close: still the same ops day.
     return True
 
 
 def in_batch3_watch_window(now: datetime | None = None) -> bool:
-    """From 06:10 ET until the evening close (same ops-day calendar morning/day)."""
+    """From 06:10 ET until the ops-day close (same ops-day morning/afternoon)."""
     current = _as_eastern(now)
     if new_ops_window_started(current):
         return False
@@ -136,11 +137,11 @@ def should_poll_slot_assignment(
     current = _as_eastern(now)
     window_ops = switch_window_operation_date(now)
 
-    # 19:10 uses saved batch only.
+    # Closing :10 uses saved batch only.
     if is_closing_scrape_slot(current):
         return False
 
-    # Evening open: still waiting for Batch No to leave the pre-switch value.
+    # Ops-day open: still waiting for Batch No to leave the pre-switch value.
     if state and state.awaiting_from:
         return True
 
@@ -168,11 +169,11 @@ def should_poll_slot_assignment(
     if window_batch1_confirmed(state, window_ops):
         return False
 
-    # Evening open: every run from 19:30 until the first switch is confirmed.
+    # Ops-day open: every run from the switch until the first switch is confirmed.
     if new_ops_window_started(current):
         return True
 
-    # Daytime catch-up: 19:30 was missed/skipped and this window is not confirmed.
+    # Catch-up: the open was missed/skipped and this window is not confirmed.
     return True
 
 
@@ -241,7 +242,7 @@ def resolve_job(
     print(
         f"No saved batch yet; bootstrapped from clock: {fallback.subbatch} "
         f"(operation date {fallback.operation_date}). "
-        "Will poll Slot Assignment from next 19:30 ET until Batch No changes."
+        "Will poll Slot Assignment from next ops-day open until Batch No changes."
     )
     return ResolveResult(jobs=(fallback,))
 

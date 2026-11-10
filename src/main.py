@@ -220,7 +220,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--refresh-batch",
         action="store_true",
-        help="Force Slot Assignment Batch No refresh (normally only from 19:30 ET).",
+        help="Force Slot Assignment Batch No refresh (normally only from ops-day open).",
     )
     parser.add_argument(
         "--use-sheet",

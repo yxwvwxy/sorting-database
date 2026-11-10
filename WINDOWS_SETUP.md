@@ -129,11 +129,12 @@ You usually do **not** need to reinstall Playwright. The next :10 / :30 / :50 ru
 
 **Batch**
 
-- **19:10 ET** → saved batch only; do not open Slot Assignment  
-- **From 19:30 ET** until Slot `Batch No` changes → poll Slot each run  
+- **16:10 ET** → saved batch only (C last scrape); do not open Slot Assignment  
+- **From 16:30 ET** until Slot `Batch No` changes → poll Slot each run  
   - Still old → keep old batch, check again next run  
-  - Changed → use the page batch (evening of D → ops day D+1)  
+  - Changed → use the page batch (open of D → ops day D+1, phase A)  
 - From **23:10** watch for batch 2; from **06:10** watch for batch 3 (see scraper docs)  
+- Before **2026-11-10** the close/open pair was 19:10 / 19:30  
 - Slot check failure → not confirmed; keep polling  
 - Manual: `.\scripts\run_scrape.bat --refresh-batch`
 
