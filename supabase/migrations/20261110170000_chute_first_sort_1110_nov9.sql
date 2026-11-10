@@ -1,0 +1,166 @@
+-- Regular plan cutover for ops day 2026-11-09 (opens 2026-11-08 16:30 ET).
+-- A/C: 第一次分拣模版1110-draft-1794325457246 (UniMap id 613).
+-- B stays 二次分拣模版1105 (id 560); re-read matched open resort rows.
+-- Prior open rows for touched chutes end_date = 2026-11-08;
+-- new/changed rows effective_date = 2026-11-09. Unchanged chutes keep end_date null.
+
+UPDATE public.chute_destination_gofo
+SET end_date = DATE '2026-11-08'
+WHERE end_date IS NULL
+  AND chute_id IN (269,367,77001,82001,87001,92001,97001,102001,107001);
+
+INSERT INTO public.chute_destination_gofo (
+    chute_id, bundle_type, destination_warehouse, effective_date, route, sort_type
+)
+SELECT v.chute_id, v.bundle_type, v.destination_warehouse, v.effective_date, v.route, v.sort_type
+FROM (
+    VALUES
+        (269, 'transit', NULL, DATE '2026-11-09', '171894.GOFO Rejected', NULL),
+        (269, 'transit', NULL, DATE '2026-11-09', '181894.GOFO Rejected', NULL),
+        (367, 'transit', 'JFK175', DATE '2026-11-09', '170989.AE Blind scanned', 'by_city'),
+        (367, 'transit', 'JFK175', DATE '2026-11-09', '170990.USPS', 'by_city'),
+        (367, 'transit', 'JFK175', DATE '2026-11-09', '170991.Out of Range', 'by_city'),
+        (367, 'transit', 'JFK175', DATE '2026-11-09', '170992.Driver Parcel Unscanned', 'by_city'),
+        (367, 'transit', 'JFK175', DATE '2026-11-09', '170993.Orders need to be addressed', 'by_city'),
+        (367, 'transit', 'JFK175', DATE '2026-11-09', '170994.Second Delivery', 'by_city'),
+        (367, 'transit', 'JFK175', DATE '2026-11-09', '170995.Shortage', 'by_city'),
+        (367, 'transit', 'JFK175', DATE '2026-11-09', '170996.Customer reject', 'by_city'),
+        (367, 'transit', 'JFK175', DATE '2026-11-09', '170997.Wrong City', 'by_city'),
+        (367, 'transit', 'JFK175', DATE '2026-11-09', '170998.Reserved 01', 'by_city'),
+        (367, 'transit', 'JFK175', DATE '2026-11-09', '170999.Reserved 02', 'by_city'),
+        (367, 'transit', 'JFK175', DATE '2026-11-09', '171777.TikTok USPS dangerous goods', 'by_city'),
+        (367, 'transit', 'JFK175', DATE '2026-11-09', '171888.TikTok CBT Carrier SwiftX', 'by_city'),
+        (367, 'transit', 'JFK175', DATE '2026-11-09', '171889.TikTok CBT Carrier SpeedX', 'by_city'),
+        (367, 'transit', 'JFK175', DATE '2026-11-09', '171890.RTS Collector', 'by_city'),
+        (367, 'transit', 'JFK175', DATE '2026-11-09', '171891.TT UPS Collector', 'by_city'),
+        (367, 'transit', 'JFK175', DATE '2026-11-09', '171893.Uni Air', 'by_city'),
+        (367, 'transit', 'JFK175', DATE '2026-11-09', '175002.21-JFK.H-JFK01-12-U', 'by_city'),
+        (367, 'transit', 'JFK175', DATE '2026-11-09', '185034.21-JFK.H-LGA01-45-U', 'by_city'),
+        (367, 'transit', 'JFK175', DATE '2026-11-09', '185176.22-EWR.H-FRG01-51-U', 'by_city'),
+        (367, 'transit', 'JFK175', DATE '2026-11-09', 'BR_JFK_01', 'by_city'),
+        (77001, 'transit', 'EWR.H', DATE '2026-11-09', '185182.22-EWR.H-FRG01-57-G', 'by_route'),
+        (82001, 'transit', 'EWR.H', DATE '2026-11-09', '185184.22-EWR.H-FRG01-59-G', 'by_route'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740001.PWM Route01', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740002.PWM Route02', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740003.PWM Route03', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740004.PWM Route04', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740005.PWM Route05', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740006.PWM Route06', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740007.PWM Route07', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740008.PWM Route08', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740009.PWM Route09', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740010.PWM Route10', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740011.PWM Route11', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740012.PWM Route12', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740013.PWM Route13', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740014.PWM Route14', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740015.PWM Route15', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740016.PWM Route16', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740017.PWM Route17', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740018.PWM Route18', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740019.PWM Route19', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740020.PWM Route20', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740021.PWM Route21', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740022.PWM Route22', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740023.PWM Route23', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740024.PWM Route24', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740025.PWM Route25', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740026.PWM Route26', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740027.PWM Route27', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740028.PWM Route28', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740029.PWM Route29', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740030.PWM Route30', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740031.PWM Route31', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740032.PWM Route32', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740033.PWM Route33', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740034.PWM Route34', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740035.PWM Route35', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740036.PWM Route36', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740037.PWM Route37', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740038.PWM Route38', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740039.PWM Route39', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740040.PWM Route40', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740041.PWM Route41', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740042.PWM Route42', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740043.PWM Route43', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740044.PWM Route44', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740045.PWM Route45', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740046.PWM Route46', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740047.PWM Route47', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740048.PWM Route48', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740049.PWM Route49', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740050.PWM Route50', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740051.PWM Route51', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740052.PWM Route52', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740053.PWM Route53', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740054.PWM Route54', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740055.PWM Route55', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740056.PWM Route56', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740057.PWM Route57', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740058.PWM Route58', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740059.PWM Route59', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740060.PWM Route60', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740061.PWM Route61', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740062.PWM Route62', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740063.PWM Route63', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740064.PWM Route64', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740065.PWM Route65', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740066.PWM Route66', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740067.PWM Route67', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740068.PWM Route68', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740069.PWM Route69', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740070.PWM Route70', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740071.PWM Route71', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740072.PWM Route72', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740073.PWM Route73', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740074.PWM Route74', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740075.PWM Route75', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740076.PWM Route76', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740077.PWM Route77', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740078.PWM Route78', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740079.PWM Route79', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740080.PWM Route80', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740081.PWM Route81', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740082.PWM Route82', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740083.PWM Route83', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740084.PWM Route84', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740085.PWM Route85', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740086.PWM Route86', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740087.PWM Route87', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740088.PWM Route88', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740089.PWM Route89', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740090.PWM Route90', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740091.PWM Route91', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740092.PWM Route92', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740093.PWM Route93', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740094.PWM Route94', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740095.PWM Route95', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740096.PWM Route96', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740097.PWM Route97', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740098.PWM Route98', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740099.PWM Route99', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740100.PWM Route100', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740991.Out of Range', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740992.Driver Parcel Unscanned', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740993.Orders Need to be Addressed', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740994.Second Delivery', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740995.Shortage', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740996.Customer Reject', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740997.Wrong City', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740998.Reserved 01', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '740999.Reserved 02', 'by_city'),
+        (102001, 'transit', 'PWM417', DATE '2026-11-09', '741890.RTS Collector', 'by_city')
+) AS v(chute_id, bundle_type, destination_warehouse, effective_date, route, sort_type)
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM public.chute_destination_gofo existing
+    WHERE existing.chute_id = v.chute_id
+      AND existing.destination_warehouse IS NOT DISTINCT FROM v.destination_warehouse
+      AND existing.effective_date IS NOT DISTINCT FROM v.effective_date
+      AND existing.route IS NOT DISTINCT FROM v.route
+      AND existing.sort_type IS NOT DISTINCT FROM v.sort_type
+      AND existing.end_date IS NULL
+);
+
+-- touched=9 added=[269] ended=[87001, 92001, 97001, 107001] dest_sort=[77001, 82001, 102001] route_only=[367]
+-- plan id=613 name=第一次分拣模版1110-draft-1794325457246

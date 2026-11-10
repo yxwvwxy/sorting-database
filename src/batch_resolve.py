@@ -3,7 +3,7 @@
 Agreed ops rules (America/New_York):
 
 - Each ops day uses three segments: A, B, C (batch_phase 1, 2, 3).
-  - A opens at the ops-day switch (16:30 ET from 2026-11-10; was 19:30).
+  - A opens at the ops-day switch (16:30 ET from 2026-11-08 / ops day 11/9; was 19:30).
   - From 23:10, every scrape opens Slot Assignment until Batch No leaves
     A. If unchanged, keep scraping A. When it changes, that run scrapes A
     one last time and B for the first time; then stop Slot checks until
@@ -21,10 +21,10 @@ Agreed ops rules (America/New_York):
   under their Batch No. From the first stored C scrape of ops day 2026-11-05
   (09:10:16 ET) the regular plan is `第一次分拣模版1103`; until that capture,
   regular remains `458-config`.
-- Closing slot (16:00-16:29 from 2026-11-10; was 19:00-19:29): never open
-  Slot Assignment; use the saved batch. On an early-switch date that
-  closing slot is one hour earlier.
-- From the ops-day open (16:30 from 2026-11-10) until Slot Batch No leaves
+- Closing slot (16:00-16:29 from 2026-11-08 / ops day 11/9; was 19:00-19:29):
+  never open Slot Assignment; use the saved batch. On an early-switch date
+  that closing slot is one hour earlier.
+- From the ops-day open (16:30 from 2026-11-08) until Slot Batch No leaves
   the pre-switch value, every run opens Slot Assignment (early-switch
   evenings start at 18:30 / 17:30).
 - If a Slot check fails, the next run must try again (do not mark confirmed).
@@ -87,7 +87,7 @@ class ResolveResult:
 def switch_window_operation_date(now: datetime | None = None) -> date:
     """Ops date for the active post-open switch window.
 
-    From 2026-11-10: Nov 10 16:30 -> Nov 11; Nov 11 01:10 -> Nov 11.
+    From 2026-11-08: Nov 8 16:30 -> Nov 9; Nov 9 01:10 -> Nov 9.
     Earlier evenings used 19:30 the same way.
     """
     current = _as_eastern(now)

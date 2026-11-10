@@ -134,7 +134,7 @@ You usually do **not** need to reinstall Playwright. The next :10 / :30 / :50 ru
   - Still old → keep old batch, check again next run  
   - Changed → use the page batch (open of D → ops day D+1, phase A)  
 - From **23:10** watch for batch 2; from **06:10** watch for batch 3 (see scraper docs)  
-- Before **2026-11-10** the close/open pair was 19:10 / 19:30  
+- Before ops day **2026-11-09** (calendar open **2026-11-08** 16:30) the close/open pair was 19:10 / 19:30  
 - Slot check failure → not confirmed; keep polling  
 - Manual: `.\scripts\run_scrape.bat --refresh-batch`
 

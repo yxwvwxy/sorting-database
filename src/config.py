@@ -90,12 +90,12 @@ def validate_supabase_settings(settings: Settings) -> None:
         )
 
 
-# From 2026-11-10: 16:10 ET is the last scrape of the current ops day (C);
-# 16:30 ET is the first scrape of the new ops day (A) and must read the new Batch No.
-# Before that date the pair was 19:10 / 19:30. Early-switch dates open earlier:
-# the :10 before that time stays on the current ops day (e.g. 18:10 / 18:30,
-# or 17:10 / 17:30 on 2026-11-01).
-OPS_SWITCH_FROM = date(2026, 11, 10)
+# From calendar 2026-11-08 16:30 ET (opens ops day 2026-11-09): 16:10 is the
+# last scrape of the current ops day (C); 16:30 is the first scrape of the new
+# ops day (A) and must read the new Batch No. Before that the pair was
+# 19:10 / 19:30. Early-switch dates open earlier: the :10 before that time
+# stays on the current ops day (e.g. 18:10 / 18:30, or 17:10 / 17:30 on 2026-11-01).
+OPS_SWITCH_FROM = date(2026, 11, 8)
 OPS_SWITCH_HOUR = 16
 OPS_SWITCH_MINUTE = 30
 LEGACY_OPS_SWITCH_HOUR = 19
@@ -113,7 +113,7 @@ EARLY_OPS_SWITCH_MINUTE = 30
 
 @dataclass(frozen=True)
 class SubbatchJob:
-    """One sorting operation day (4pm–4pm ET from 2026-11-10; earlier 7pm–7pm).
+    """One sorting operation day (4pm–4pm ET from ops day 2026-11-09; earlier 7pm–7pm).
 
     ``operation_date`` is the business day (stamp date + 1).
     The live batch number comes from Slot Assignment at the ops-day open.
@@ -166,7 +166,7 @@ def _ops_switch_clock(current: datetime) -> tuple[int, int]:
 def new_ops_window_started(now: datetime | None = None) -> bool:
     """True from the ops-day open until the next day's open.
 
-    From 2026-11-10: 16:30 ET. Earlier: 19:30 ET.
+    From 2026-11-08 16:30 ET (ops day 2026-11-09). Earlier: 19:30 ET.
     Early-switch dates use EARLY_OPS_SWITCH_AT (e.g. 18:30 or 17:30).
     """
     current = _as_eastern(now)
@@ -177,7 +177,7 @@ def new_ops_window_started(now: datetime | None = None) -> bool:
 def is_closing_scrape_slot(now: datetime | None = None) -> bool:
     """True for the :10 before the switch. That scrape stays on the current batch.
 
-    From 2026-11-10: 16:00–16:29 ET (C's last scrape is 16:10).
+    From 2026-11-08: 16:00–16:29 ET (C's last scrape is 16:10).
     Earlier: 19:00–19:29 ET. On early-switch evenings it is the hour before
     the switch (e.g. 18:00–18:29 or 17:00–17:29).
     """
@@ -189,8 +189,8 @@ def is_closing_scrape_slot(now: datetime | None = None) -> bool:
 def operation_date_et(now: datetime | None = None) -> date:
     """Return the operation date for the active ops-day window (4pm–4pm ET).
 
-    Switch to the new batch at the open (16:30 from 2026-11-10). The :10
-    scrape before that still belongs to the previous batch.
+    Switch to the new batch at the open (16:30 from 2026-11-08 / ops day 11/9).
+    The :10 scrape before that still belongs to the previous batch.
     """
     return current_subbatch_job(now=now).operation_date
 
@@ -220,7 +220,7 @@ def current_subbatch_job(
 ) -> SubbatchJob:
     """Resolve a clock fallback batch (no Google Sheet, no Slot Assignment).
 
-    Schedule alignment (from 2026-11-10):
+    Schedule alignment (from 2026-11-08 16:30 / ops day 2026-11-09):
     - 16:10 ET → last scrape of the previous ops day (C)
     - 16:30 ET → first scrape of the new ops day (A); the real Batch No comes
       from Slot Assignment, not this fallback id
