@@ -120,6 +120,13 @@
       color: var(--muted);
       font-size: 0.9rem;
     }
+    .gofo-b-estimate {
+      margin: 0 0 0.85rem;
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 0.95rem;
+      color: var(--amber);
+      font-weight: 500;
+    }
     .grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
@@ -632,6 +639,7 @@
       </div>
       <div id="gofo-meta" class="meta"></div>
       <p id="gofo-error" class="error hidden"></p>
+      <p id="gofo-b-estimate" class="gofo-b-estimate hidden"></p>
       <h2>Latest city totals</h2>
       <p class="caption">JFK175 volume is under JFK/PWM (7pm outbound). Open Details on the JFK tile for each city and for a chute that holds more than one city. PWM is its own tile.</p>
       <p class="caption">Bundle count follows the selected batch. A bundle is counted once if it was created during that ops day, through the batch's latest chute scrape. It still counts after it ships or arrives. Uni hub tiles follow the destination warehouse. EWR, BWI, JFK, and PWM follow the area.</p>
@@ -911,6 +919,87 @@
       const dt = new Date(Date.UTC(y, m - 1, d));
       dt.setUTCDate(dt.getUTCDate() - days);
       return dt.toISOString().slice(0, 10);
+    }
+
+    function ymdAddDays(ymd, days) {
+      const [y, m, d] = String(ymd).split("-").map(Number);
+      const dt = new Date(Date.UTC(y, m - 1, d));
+      dt.setUTCDate(dt.getUTCDate() + days);
+      return dt.toISOString().slice(0, 10);
+    }
+
+    function scrapeAtOrBeforeA1050(scrapedAt, opsDay) {
+      // Ops day D opens calendar D-1 16:30 ET; A "through 10:50pm" = that evening ≤ 22:50.
+      const openCal = ymdAddDays(opsDay, -1);
+      const p = etParts(scrapedAt, {
+        year: "numeric", month: "2-digit", day: "2-digit",
+        hour: "2-digit", minute: "2-digit", hour12: false,
+      });
+      const ymd = `${p.year}-${p.month}-${p.day}`;
+      if (ymd < openCal) return true;
+      if (ymd > openCal) return false;
+      const hour = Number(p.hour === "24" ? 0 : p.hour);
+      return hour * 60 + Number(p.minute) <= 22 * 60 + 50;
+    }
+
+    function ewrMultiTotalAtLatest(series, { throughA1050 = false, opsDay = null } = {}) {
+      let rows = (series || []).filter((r) => r.section === "ewr_multi");
+      if (throughA1050 && opsDay) {
+        rows = rows.filter((r) => scrapeAtOrBeforeA1050(r.scraped_at, opsDay));
+      }
+      if (!rows.length) return null;
+      const latestTs = rows.reduce(
+        (m, r) => (r.scraped_at > m ? r.scraped_at : m),
+        rows[0].scraped_at
+      );
+      return rows
+        .filter((r) => r.scraped_at === latestTs)
+        .reduce((sum, r) => sum + Number(r.total_volume || 0), 0);
+    }
+
+    async function updateGofoBEstimate(opsDay, aSeriesMaybe) {
+      const el = $("gofo-b-estimate");
+      if (!el) return;
+      if (!opsDay || String(opsDay) < SEGMENT_FROM) {
+        el.classList.add("hidden");
+        el.textContent = "";
+        return;
+      }
+      const prevDay = ymdAddDays(opsDay, -1);
+      const cBatch = gofoBatches.find(
+        (b) => String(b.subbatch_date) === prevDay && Number(b.batch_phase) === 3
+      );
+      const aBatch = gofoBatches.find(
+        (b) => String(b.subbatch_date) === String(opsDay) && Number(b.batch_phase) === 1
+      );
+      if (!cBatch || !aBatch) {
+        el.textContent = "B段单量预估：—";
+        el.classList.remove("hidden");
+        return;
+      }
+      try {
+        const needAFetch = !Array.isArray(aSeriesMaybe);
+        const [cRaw, aRaw] = await Promise.all([
+          rpc("gofo_city_volume_series", { p_subbatch: cBatch.subbatch }),
+          needAFetch
+            ? rpc("gofo_city_volume_series", { p_subbatch: aBatch.subbatch })
+            : Promise.resolve(aSeriesMaybe),
+        ]);
+        const cTotal = ewrMultiTotalAtLatest(cRaw);
+        const aTotal = ewrMultiTotalAtLatest(needAFetch ? aRaw : aSeriesMaybe, {
+          throughA1050: true,
+          opsDay: String(opsDay),
+        });
+        if (cTotal == null || aTotal == null) {
+          el.textContent = "B段单量预估：—";
+        } else {
+          el.textContent = `B段单量预估：${fmt(cTotal + aTotal)}`;
+        }
+        el.classList.remove("hidden");
+      } catch (err) {
+        el.textContent = "B段单量预估：—";
+        el.classList.remove("hidden");
+      }
     }
 
     function formatHour12(iso) {
@@ -2277,6 +2366,7 @@
         const series = (seriesRaw || [])
           .filter((r) => r.city && r.section)
           .map((r) => ({ ...r, code: r.city, city: `${r.section}|${r.city}` }));
+        await updateGofoBEstimate(batch.subbatch_date);
         if (!series.length) {
           $("gofo-tiles").innerHTML = "";
           showError("gofo-error", new Error("No EWR.H one-route rows for this B segment."));
@@ -2298,6 +2388,8 @@
         .filter((r) => r.city && r.section)
         .map((r) => ({ ...r, code: r.city, city: `${r.section}|${r.city}` }));
       mixed = [...(mixed || [])].sort((a, b) => Number(a.chute_id) - Number(b.chute_id));
+      const aSeriesForEstimate = Number(batch.batch_phase) === 1 ? series : null;
+      await updateGofoBEstimate(batch.subbatch_date, aSeriesForEstimate);
       if (!series.length && !mixed.length) {
         $("gofo-tiles").innerHTML = "";
         gofoChartModel = { series: [], cities: [] };
