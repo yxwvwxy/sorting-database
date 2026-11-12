@@ -928,18 +928,34 @@
       return dt.toISOString().slice(0, 10);
     }
 
-    function scrapeAtOrBeforeA1050(scrapedAt, opsDay) {
-      // Ops day D opens calendar D-1 16:30 ET; A "through 10:50pm" = that evening ≤ 22:50.
-      const openCal = ymdAddDays(opsDay, -1);
-      const p = etParts(scrapedAt, {
+    function aOpenCalendarYmd(opsDay) {
+      // Ops day D opens calendar D-1 16:30 ET.
+      return ymdAddDays(opsDay, -1);
+    }
+
+    function etYmdMinutes(iso) {
+      const p = etParts(iso, {
         year: "numeric", month: "2-digit", day: "2-digit",
         hour: "2-digit", minute: "2-digit", hour12: false,
       });
-      const ymd = `${p.year}-${p.month}-${p.day}`;
+      const hour = Number(p.hour === "24" ? 0 : p.hour);
+      return {
+        ymd: `${p.year}-${p.month}-${p.day}`,
+        minutes: hour * 60 + Number(p.minute),
+      };
+    }
+
+    function scrapeAtOrBeforeA1050(scrapedAt, opsDay) {
+      // A "through 10:50pm" = open-evening calendar day ≤ 22:50 ET.
+      const openCal = aOpenCalendarYmd(opsDay);
+      const { ymd, minutes } = etYmdMinutes(scrapedAt);
       if (ymd < openCal) return true;
       if (ymd > openCal) return false;
-      const hour = Number(p.hour === "24" ? 0 : p.hour);
-      return hour * 60 + Number(p.minute) <= 22 * 60 + 50;
+      return minutes <= 22 * 60 + 50;
+    }
+
+    function a1050CutoffPassed(opsDay, nowIso = new Date().toISOString()) {
+      return !scrapeAtOrBeforeA1050(nowIso, opsDay);
     }
 
     function ewrMultiTotalAtLatest(series, { throughA1050 = false, opsDay = null } = {}) {
@@ -955,6 +971,15 @@
       return rows
         .filter((r) => r.scraped_at === latestTs)
         .reduce((sum, r) => sum + Number(r.total_volume || 0), 0);
+    }
+
+    function ewrMultiAForBEstimate(series, opsDay) {
+      // Before 10:50pm: follow the latest A scrape. After 10:50pm: freeze at ≤22:50.
+      const freeze = a1050CutoffPassed(opsDay);
+      return ewrMultiTotalAtLatest(series, {
+        throughA1050: freeze,
+        opsDay: String(opsDay),
+      });
     }
 
     async function updateGofoBEstimate(opsDay, aSeriesMaybe) {
@@ -985,11 +1010,9 @@
             ? rpc("gofo_city_volume_series", { p_subbatch: aBatch.subbatch })
             : Promise.resolve(aSeriesMaybe),
         ]);
+        const aSeries = needAFetch ? aRaw : aSeriesMaybe;
         const cTotal = ewrMultiTotalAtLatest(cRaw);
-        const aTotal = ewrMultiTotalAtLatest(needAFetch ? aRaw : aSeriesMaybe, {
-          throughA1050: true,
-          opsDay: String(opsDay),
-        });
+        const aTotal = ewrMultiAForBEstimate(aSeries, opsDay);
         if (cTotal == null || aTotal == null) {
           el.textContent = "B段单量预估：—";
         } else {
