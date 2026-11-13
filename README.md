@@ -1,6 +1,6 @@
 # Sorting Database
 
-A data pipeline and live dashboard that makes sorting data visible to operations and the onsite sort team, helping plan and forecast staffing and transportation for a network of 30+ cities and 210k parcels a day. A Playwright scraper reads sort volumes every 20 minutes, 24/7, and stores them in Supabase, together with a versioned map of which chute serves which city. A dashboard turns the data into city curves, hourly throughput and feed-station volumes.
+A data pipeline and live dashboard that makes sorting data visible to operations and the onsite sort team, helping plan and forecast staffing and transportation for a network of 35+ cities and 210k parcels a day. A Playwright scraper reads sort volumes every 20 minutes, 24/7, and stores them in Supabase, together with a versioned map of which chute serves which city. A dashboard turns the data into city curves, hourly throughput and feed-station volumes.
 
 **Live site:** [https://yxwvwxy.github.io/sorting-database/](https://yxwvwxy.github.io/sorting-database/)
 
