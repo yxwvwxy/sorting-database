@@ -477,6 +477,19 @@
       font-weight: 500;
     }
     .bundle-table.status-board td.zero { color: var(--muted); }
+    .city-sum-table th.num,
+    .city-sum-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    .city-sum-table thead th { color: var(--ink); }
+    .city-sum-table tbody th {
+      text-align: left;
+      color: var(--mint);
+      font-weight: 500;
+    }
+    .city-sum-table td.total {
+      color: var(--mint);
+      font-weight: 600;
+    }
+    .city-sum-table td.zero { color: var(--muted); }
     .bundle-fold { margin: -0.4rem 0 1.15rem; }
     .bundle-fold summary,
     .bundle-band > summary {
@@ -621,14 +634,14 @@
     </div>
 
     <nav id="app-tabs" class="app-tabs hidden" aria-label="Dashboard sections">
-      <button type="button" class="app-tab" data-tab="gofo" id="tab-gofo">Gofo</button>
-      <button type="button" class="app-tab" data-tab="bundle" id="tab-bundle">Bundle</button>
-      <button type="button" class="app-tab" data-tab="feed" id="tab-feed">Feed &amp; hourly</button>
+      <button type="button" class="app-tab" data-tab="gofo" id="tab-gofo">City Growth</button>
+      <button type="button" class="app-tab" data-tab="bundle" id="tab-bundle">Bundle &amp; Sum</button>
+      <button type="button" class="app-tab" data-tab="feed" id="tab-feed">Feed &amp; Hourly</button>
       <button type="button" class="app-tab" data-tab="city" id="tab-city">City / hub</button>
     </nav>
 
     <section id="gofo-section" class="section hidden">
-      <h2>Gofo</h2>
+      <h2>City Growth</h2>
       <div class="controls">
         <label>Batch / ops day
           <select id="gofo-batch"></select>
@@ -654,7 +667,7 @@
     </section>
 
     <section id="bundle-section" class="section hidden">
-      <h2>Bundle</h2>
+      <h2>Bundle &amp; Sum</h2>
       <div class="controls">
         <label>&nbsp;
           <button id="bundle-reload" type="button">Refresh</button>
@@ -664,6 +677,9 @@
       <p id="bundle-error" class="error hidden"></p>
       <p class="caption">Last 24 hours, by when the bundle was created, not by ops day. Each bundle is counted once at its latest status. Uni hub rows follow the destination warehouse. EWR one route and multiple routes follow the area.</p>
       <div id="bundle-body"></div>
+      <h2 style="margin-top:1.35rem">Past 7 days city volume (A+C)</h2>
+      <p class="caption">Excludes B (secondary split). Final A and C scrapes per ops day. Newest day on the left. Sorted by 7-day total.</p>
+      <div id="bundle-city-sum" class="bundle-table-wrap"></div>
     </section>
 
     <section id="city-section" class="section hidden">
@@ -687,7 +703,7 @@
     </section>
 
     <section id="feed-section" class="section hidden">
-      <h2>Feed &amp; hourly</h2>
+      <h2>Feed &amp; Hourly</h2>
       <div class="controls">
         <label>Batch / ops day
           <select id="feed-batch"></select>
@@ -2562,10 +2578,69 @@
       `;
     }
 
+    function ymdToMd(ymd) {
+      const [, m, d] = String(ymd).split("-");
+      return `${Number(m)}/${Number(d)}`;
+    }
+
+    function renderBundleCitySum(rows) {
+      const host = $("bundle-city-sum");
+      if (!host) return;
+      const days = Array.from({ length: 7 }, (_, i) => etDaysAgoYmd(i));
+      const byCity = new Map();
+      for (const row of rows || []) {
+        const city = String(row.city || "").trim();
+        if (!city) continue;
+        const day = String(row.ops_day || "").slice(0, 10);
+        if (!byCity.has(city)) byCity.set(city, Object.create(null));
+        byCity.get(city)[day] = Number(row.volume || 0);
+      }
+      const ranked = [...byCity.entries()]
+        .map(([city, dayMap]) => {
+          const daily = days.map((day) => Number(dayMap[day] || 0));
+          const total = daily.reduce((sum, n) => sum + n, 0);
+          return { city, daily, total };
+        })
+        .sort((a, b) => b.total - a.total || a.city.localeCompare(b.city));
+      if (!ranked.length) {
+        host.innerHTML = `<p class="caption">No A+C city volume in the past 7 ops days.</p>`;
+        return;
+      }
+      const headDays = days.map((day) => `<th class="num">${esc(ymdToMd(day))}</th>`).join("");
+      const body = ranked.map((row, i) => {
+        const cells = row.daily.map((n) => {
+          const cls = ["num", n ? "" : "zero"].filter(Boolean).join(" ");
+          return `<td class="${cls}">${fmt(n)}</td>`;
+        }).join("");
+        return `<tr>
+          <td class="num">${i + 1}</td>
+          <th>${esc(row.city)}</th>
+          <td class="num total">${fmt(row.total)}</td>
+          ${cells}
+        </tr>`;
+      }).join("");
+      host.innerHTML = `
+        <table class="bundle-table city-sum-table">
+          <thead>
+            <tr>
+              <th class="num">#</th>
+              <th>City</th>
+              <th class="num">7-day total</th>
+              ${headDays}
+            </tr>
+          </thead>
+          <tbody>${body}</tbody>
+        </table>`;
+    }
+
     async function loadBundleBoard() {
       showError("bundle-error", null);
-      const rows = await rpc("bundle_board", { p_operation_date: etDaysAgoYmd(0) });
+      const [rows, cityRows] = await Promise.all([
+        rpc("bundle_board", { p_operation_date: etDaysAgoYmd(0) }),
+        rpc("gofo_city_ac_daily_summary", { p_days: 7 }),
+      ]);
       renderBundle(rows || []);
+      renderBundleCitySum(cityRows || []);
     }
 
     async function bootApp() {
@@ -2719,6 +2794,7 @@
         $("gofo-chute-counts").innerHTML = "";
         $("bundle-body").innerHTML = "";
         $("bundle-meta").innerHTML = "";
+        if ($("bundle-city-sum")) $("bundle-city-sum").innerHTML = "";
         $("upper-cards").innerHTML = "";
         $("lower-cards").innerHTML = "";
         $("hourly-total").textContent = "—";
