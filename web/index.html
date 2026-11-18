@@ -44,6 +44,14 @@
       line-height: 1.05;
       color: var(--amber);
     }
+    .brand-block { min-width: 0; }
+    .credit {
+      margin: 0.35rem 0 0;
+      color: var(--muted);
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 0.78rem;
+      line-height: 1.35;
+    }
     .lede {
       margin: 0.5rem 0 0;
       color: var(--muted);
@@ -609,7 +617,10 @@
 <body>
   <div id="login-view">
     <div class="login-card">
-      <h1 class="brand">Sorting Database</h1>
+      <div class="brand-block">
+        <h1 class="brand">Sorting Database</h1>
+        <p class="credit">Vivienne Yang · Updates at :10 / :30 / :50 (every 20 min)</p>
+      </div>
       <p class="lede">Sign in to view sorting dashboards.</p>
       <form id="login-form">
         <label>Username
@@ -626,7 +637,10 @@
 
   <main id="app-view" class="hidden">
     <div class="topbar">
-      <h1 class="brand">Sorting Database</h1>
+      <div class="brand-block">
+        <h1 class="brand">Sorting Database</h1>
+        <p class="credit">Vivienne Yang · Updates at :10 / :30 / :50 (every 20 min)</p>
+      </div>
       <div class="userchip">
         <span id="user-email"></span>
         <button id="logout" type="button" class="ghost">Sign out</button>
@@ -654,8 +668,6 @@
       <p id="gofo-error" class="error hidden"></p>
       <p id="gofo-b-estimate" class="gofo-b-estimate hidden"></p>
       <h2>Latest city totals</h2>
-      <p class="caption">JFK175 volume is under JFK/PWM (7pm outbound). Open Details on the JFK tile for each city and for a chute that holds more than one city. PWM is its own tile.</p>
-      <p class="caption">Bundle count follows the selected batch. A bundle is counted once if it was created during that ops day, through the batch's latest chute scrape. It still counts after it ships or arrives. Uni hub tiles follow the destination warehouse. EWR, BWI, JFK, and PWM follow the area.</p>
       <div id="gofo-tiles" class="city-modules"></div>
       <div id="gofo-growth">
       <h2 style="margin-top:1.35rem">Growth chart</h2>
@@ -678,7 +690,7 @@
       <p class="caption">Last 24 hours, by when the bundle was created, not by ops day. Each bundle is counted once at its latest status. Uni hub rows follow the destination warehouse. EWR one route and multiple routes follow the area.</p>
       <div id="bundle-body"></div>
       <h2 style="margin-top:1.35rem">Past 7 days city volume (A+C)</h2>
-      <p class="caption">Last 7 completed ops days only (current ops day excluded until 4:30pm ET). Excludes B. Newest day on the left. Uni hub and other cities are listed separately.</p>
+      <p class="caption">Stored finals for the last 7 completed ops days (current ops day excluded until 4:30pm ET). Excludes B. Newest day on the left. Uni hub and other cities are listed separately.</p>
       <div id="bundle-city-sum"></div>
     </section>
 
@@ -1013,8 +1025,9 @@
       const aBatch = gofoBatches.find(
         (b) => String(b.subbatch_date) === String(opsDay) && Number(b.batch_phase) === 1
       );
+      const bNote = "C段全部单量 + A段至10:50pm";
       if (!cBatch || !aBatch) {
-        el.textContent = "B段单量预估：—";
+        el.textContent = `B段单量预估：—（${bNote}）`;
         el.classList.remove("hidden");
         return;
       }
@@ -1030,13 +1043,13 @@
         const cTotal = ewrMultiTotalAtLatest(cRaw);
         const aTotal = ewrMultiAForBEstimate(aSeries, opsDay);
         if (cTotal == null || aTotal == null) {
-          el.textContent = "B段单量预估：—";
+          el.textContent = `B段单量预估：—（${bNote}）`;
         } else {
-          el.textContent = `B段单量预估：${fmt(cTotal + aTotal)}`;
+          el.textContent = `B段单量预估：${fmt(cTotal + aTotal)}（${bNote}）`;
         }
         el.classList.remove("hidden");
       } catch (err) {
-        el.textContent = "B段单量预估：—";
+        el.textContent = `B段单量预估：—（${bNote}）`;
         el.classList.remove("hidden");
       }
     }
@@ -2669,12 +2682,15 @@
 
     async function loadBundleBoard() {
       showError("bundle-error", null);
-      const [rows, cityRows] = await Promise.all([
-        rpc("bundle_board", { p_operation_date: etDaysAgoYmd(0) }),
-        rpc("gofo_city_ac_daily_summary", { p_days: 7 }),
-      ]);
-      renderBundle(rows || []);
-      renderBundleCitySum(cityRows || []);
+      const boardP = rpc("bundle_board", { p_operation_date: etDaysAgoYmd(0) })
+        .then((rows) => { renderBundle(rows || []); });
+      const sumP = rpc("gofo_city_ac_daily_summary", { p_days: 7 })
+        .then((cityRows) => { renderBundleCitySum(cityRows || []); })
+        .catch((err) => {
+          showError("bundle-error", err);
+          renderBundleCitySum([]);
+        });
+      await Promise.all([boardP, sumP]);
     }
 
     async function bootApp() {
