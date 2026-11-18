@@ -135,6 +135,10 @@
       color: var(--amber);
       font-weight: 500;
     }
+    .gofo-b-estimate .b-note {
+      color: var(--muted);
+      font-weight: 400;
+    }
     .grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
@@ -1016,6 +1020,7 @@
       if (!opsDay || String(opsDay) < SEGMENT_FROM) {
         el.classList.add("hidden");
         el.textContent = "";
+        el.innerHTML = "";
         return;
       }
       const prevDay = ymdAddDays(opsDay, -1);
@@ -1025,9 +1030,9 @@
       const aBatch = gofoBatches.find(
         (b) => String(b.subbatch_date) === String(opsDay) && Number(b.batch_phase) === 1
       );
-      const bNote = "C段全部单量 + A段至10:50pm";
+      const bNoteHtml = `<span class="b-note">（C段全部单量 + A段至10:50pm）</span>`;
       if (!cBatch || !aBatch) {
-        el.textContent = `B段单量预估：—（${bNote}）`;
+        el.innerHTML = `B段单量预估：—${bNoteHtml}`;
         el.classList.remove("hidden");
         return;
       }
@@ -1043,13 +1048,13 @@
         const cTotal = ewrMultiTotalAtLatest(cRaw);
         const aTotal = ewrMultiAForBEstimate(aSeries, opsDay);
         if (cTotal == null || aTotal == null) {
-          el.textContent = `B段单量预估：—（${bNote}）`;
+          el.innerHTML = `B段单量预估：—${bNoteHtml}`;
         } else {
-          el.textContent = `B段单量预估：${fmt(cTotal + aTotal)}（${bNote}）`;
+          el.innerHTML = `B段单量预估：${fmt(cTotal + aTotal)}${bNoteHtml}`;
         }
         el.classList.remove("hidden");
       } catch (err) {
-        el.textContent = `B段单量预估：—（${bNote}）`;
+        el.innerHTML = `B段单量预估：—${bNoteHtml}`;
         el.classList.remove("hidden");
       }
     }
