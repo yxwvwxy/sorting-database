@@ -678,8 +678,8 @@
       <p class="caption">Last 24 hours, by when the bundle was created, not by ops day. Each bundle is counted once at its latest status. Uni hub rows follow the destination warehouse. EWR one route and multiple routes follow the area.</p>
       <div id="bundle-body"></div>
       <h2 style="margin-top:1.35rem">Past 7 days city volume (A+C)</h2>
-      <p class="caption">Excludes B (secondary split). Final A and C scrapes per ops day. Newest day on the left. Sorted by 7-day total.</p>
-      <div id="bundle-city-sum" class="bundle-table-wrap"></div>
+      <p class="caption">Last 7 completed ops days only (current ops day excluded until 4:30pm ET). Excludes B. Newest day on the left. Uni hub and other cities are listed separately.</p>
+      <div id="bundle-city-sum"></div>
     </section>
 
     <section id="city-section" class="section hidden">
@@ -2583,10 +2583,25 @@
       return `${Number(m)}/${Number(d)}`;
     }
 
-    function renderBundleCitySum(rows) {
-      const host = $("bundle-city-sum");
-      if (!host) return;
-      const days = Array.from({ length: 7 }, (_, i) => etDaysAgoYmd(i));
+    function latestCompletedOpsDayYmd() {
+      // Ops day D closes at calendar D 16:30 ET; until then the current ops day is incomplete.
+      const p = etParts(new Date().toISOString(), {
+        year: "numeric", month: "2-digit", day: "2-digit",
+        hour: "2-digit", minute: "2-digit", hour12: false,
+      });
+      const today = `${p.year}-${p.month}-${p.day}`;
+      const hh = Number(p.hour);
+      const mm = Number(p.minute);
+      if (hh > 16 || (hh === 16 && mm >= 30)) return today;
+      return ymdAddDays(today, -1);
+    }
+
+    function completedOpsDayWindow(days = 7) {
+      const end = latestCompletedOpsDayYmd();
+      return Array.from({ length: days }, (_, i) => ymdAddDays(end, -i));
+    }
+
+    function rankCitySumRows(rows, days) {
       const byCity = new Map();
       for (const row of rows || []) {
         const city = String(row.city || "").trim();
@@ -2595,16 +2610,19 @@
         if (!byCity.has(city)) byCity.set(city, Object.create(null));
         byCity.get(city)[day] = Number(row.volume || 0);
       }
-      const ranked = [...byCity.entries()]
+      return [...byCity.entries()]
         .map(([city, dayMap]) => {
           const daily = days.map((day) => Number(dayMap[day] || 0));
           const total = daily.reduce((sum, n) => sum + n, 0);
           return { city, daily, total };
         })
         .sort((a, b) => b.total - a.total || a.city.localeCompare(b.city));
+    }
+
+    function citySumTableHtml(title, ranked, days) {
       if (!ranked.length) {
-        host.innerHTML = `<p class="caption">No A+C city volume in the past 7 ops days.</p>`;
-        return;
+        return `<h3 style="margin:1rem 0 0.45rem;font-size:0.95rem">${esc(title)}</h3>
+          <p class="caption">No rows.</p>`;
       }
       const headDays = days.map((day) => `<th class="num">${esc(ymdToMd(day))}</th>`).join("");
       const body = ranked.map((row, i) => {
@@ -2619,18 +2637,34 @@
           ${cells}
         </tr>`;
       }).join("");
-      host.innerHTML = `
-        <table class="bundle-table city-sum-table">
-          <thead>
-            <tr>
-              <th class="num">#</th>
-              <th>City</th>
-              <th class="num">7-day total</th>
-              ${headDays}
-            </tr>
-          </thead>
-          <tbody>${body}</tbody>
-        </table>`;
+      return `
+        <h3 style="margin:1rem 0 0.45rem;font-size:0.95rem">${esc(title)}</h3>
+        <div class="bundle-table-wrap">
+          <table class="bundle-table city-sum-table">
+            <thead>
+              <tr>
+                <th class="num">#</th>
+                <th>City</th>
+                <th class="num">7-day total</th>
+                ${headDays}
+              </tr>
+            </thead>
+            <tbody>${body}</tbody>
+          </table>
+        </div>`;
+    }
+
+    function renderBundleCitySum(rows) {
+      const host = $("bundle-city-sum");
+      if (!host) return;
+      const days = completedOpsDayWindow(7);
+      const uni = rankCitySumRows((rows || []).filter((r) => r.section_group === "uni_hub"), days);
+      const other = rankCitySumRows((rows || []).filter((r) => r.section_group !== "uni_hub"), days);
+      if (!uni.length && !other.length) {
+        host.innerHTML = `<p class="caption">No A+C city volume in the past 7 completed ops days.</p>`;
+        return;
+      }
+      host.innerHTML = `${citySumTableHtml("Uni hub", uni, days)}${citySumTableHtml("Other", other, days)}`;
     }
 
     async function loadBundleBoard() {
