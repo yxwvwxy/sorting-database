@@ -1963,12 +1963,13 @@
       ATL: ["ATL", "CLT"],
       ORD: ["ORD", "IND"],
     };
-    // Past-7 uni-hub table: parent (warehouse) hub → exclusive child hub cities.
+    // Past-7 uni-hub table: hub (大区) → hub cities (同名也要单独一行).
     const UNI_HUB_SUM_CHILDREN = {
-      ATL: ["CLT"],
-      ORD: ["IND"],
-      LAX: ["CNO"],
-      SJC: ["SFO"],
+      ATL: ["ATL", "CLT"],
+      ORD: ["ORD", "IND"],
+      LAX: ["LAX", "SJC", "SEA", "CNO", "SFO"],
+      DFW: ["DFW", "DEN", "IAH", "SLC"],
+      MIA: ["MIA"],
     };
 
     function rollupGofoSeries(series) {
@@ -2668,39 +2669,19 @@
       const byCity = new Map(ranked.map((r) => [r.city, r]));
       const childOf = new Map();
       for (const [parent, kids] of Object.entries(UNI_HUB_SUM_CHILDREN)) {
-        for (const kid of kids) childOf.set(kid, parent);
+        for (const kid of kids) {
+          // Same-name hub city stays under its hub; only other names are hidden as top-level.
+          if (kid !== parent) childOf.set(kid, parent);
+        }
       }
       const parents = [];
       const used = new Set();
-      for (const row of ranked) {
-        if (childOf.has(row.city)) continue;
-        const kids = UNI_HUB_SUM_CHILDREN[row.city] || [];
+      for (const [parent, kids] of Object.entries(UNI_HUB_SUM_CHILDREN)) {
         const childRows = kids
           .map((code) => byCity.get(code))
           .filter((r) => r && r.total > 0);
-        for (const kid of kids) used.add(kid);
-        used.add(row.city);
-        if (!childRows.length) {
-          parents.push({ ...row, children: [] });
-          continue;
-        }
-        const daily = days.map((day, i) => {
-          let sum = Number(row.daily[i] || 0);
-          for (const child of childRows) sum += Number(child.daily[i] || 0);
-          return sum;
-        });
-        parents.push({
-          city: row.city,
-          daily,
-          total: daily.reduce((s, n) => s + n, 0),
-          children: childRows,
-        });
-      }
-      // Orphan parents that only exist via children (no residual ATL row).
-      for (const [parent, kids] of Object.entries(UNI_HUB_SUM_CHILDREN)) {
-        if (used.has(parent) || byCity.has(parent)) continue;
-        const childRows = kids.map((code) => byCity.get(code)).filter((r) => r && r.total > 0);
         if (!childRows.length) continue;
+        // Hub total = sum of hub-city rows only (includes same-name hub city; no double count).
         const daily = days.map((_, i) => childRows.reduce((s, c) => s + Number(c.daily[i] || 0), 0));
         parents.push({
           city: parent,
@@ -2710,6 +2691,11 @@
         });
         used.add(parent);
         for (const kid of kids) used.add(kid);
+      }
+      for (const row of ranked) {
+        if (used.has(row.city) || childOf.has(row.city)) continue;
+        parents.push({ ...row, children: [] });
+        used.add(row.city);
       }
       return parents.sort((a, b) => b.total - a.total || a.city.localeCompare(b.city));
     }
@@ -2783,7 +2769,7 @@
       host.innerHTML = `${citySumTableHtml("Uni hub", uni, days, {
         nestChildren: true,
         nameCol: "Hub",
-        note: "Hub total includes hub-city volume (e.g. ATL includes CLT; ORD includes IND).",
+        note: "Hub = 大区 total; dropdown rows are hub cities (same name counts too, e.g. DFW hub → DFW / DEN / IAH / SLC).",
       })}${citySumTableHtml("Other", other, days)}`;
     }
 
