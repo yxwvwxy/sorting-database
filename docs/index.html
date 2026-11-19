@@ -1957,14 +1957,18 @@
     };
 
     const GOFO_ROLLUP = {
-      LAX: ["LAX", "SJC", "SEA"],
+      LAX: ["LAX", "SJC", "SEA", "CNO", "SFO"],
       DFW: ["DFW", "DEN", "IAH", "SLC"],
       // Hub cities that only exist on exclusive uni_hub chutes (never mixed).
       ATL: ["ATL", "CLT"],
+      ORD: ["ORD", "IND"],
     };
-    // Past-7 uni-hub table: parent (warehouse) city → exclusive child hub cities.
+    // Past-7 uni-hub table: parent (warehouse) hub → exclusive child hub cities.
     const UNI_HUB_SUM_CHILDREN = {
       ATL: ["CLT"],
+      ORD: ["IND"],
+      LAX: ["CNO"],
+      SJC: ["SFO"],
     };
 
     function rollupGofoSeries(series) {
@@ -2779,7 +2783,7 @@
       host.innerHTML = `${citySumTableHtml("Uni hub", uni, days, {
         nestChildren: true,
         nameCol: "Hub",
-        note: "Region total includes hub-city volume (e.g. ATL includes CLT).",
+        note: "Hub total includes hub-city volume (e.g. ATL includes CLT; ORD includes IND).",
       })}${citySumTableHtml("Other", other, days)}`;
     }
 
