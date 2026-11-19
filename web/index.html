@@ -502,6 +502,24 @@
       font-weight: 600;
     }
     .city-sum-table td.zero { color: var(--muted); }
+    .city-sum-table details.city-sum-parts {
+      display: inline;
+    }
+    .city-sum-table details.city-sum-parts > summary {
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 0.72rem;
+      list-style: none;
+    }
+    .city-sum-table details.city-sum-parts > summary::-webkit-details-marker { display: none; }
+    .city-sum-table details.city-sum-parts > summary::after { content: " ▾"; }
+    .city-sum-table tr.city-sum-child th {
+      padding-left: 1.35rem;
+      color: var(--muted);
+      font-weight: 400;
+    }
+    .city-sum-table tr.city-sum-child { display: none; }
+    .city-sum-table tr.city-sum-child.open { display: table-row; }
     .bundle-fold { margin: -0.4rem 0 1.15rem; }
     .bundle-fold summary,
     .bundle-band > summary {
@@ -1941,6 +1959,12 @@
     const GOFO_ROLLUP = {
       LAX: ["LAX", "SJC", "SEA"],
       DFW: ["DFW", "DEN", "IAH", "SLC"],
+      // Hub cities that only exist on exclusive uni_hub chutes (never mixed).
+      ATL: ["ATL", "CLT"],
+    };
+    // Past-7 uni-hub table: parent city → exclusive child hub cities.
+    const UNI_HUB_SUM_CHILDREN = {
+      ATL: ["CLT"],
     };
 
     function rollupGofoSeries(series) {
@@ -2631,28 +2655,100 @@
         .map(([city, dayMap]) => {
           const daily = days.map((day) => Number(dayMap[day] || 0));
           const total = daily.reduce((sum, n) => sum + n, 0);
-          return { city, daily, total };
+          return { city, daily, total, dayMap };
         })
         .sort((a, b) => b.total - a.total || a.city.localeCompare(b.city));
     }
 
-    function citySumTableHtml(title, ranked, days) {
-      if (!ranked.length) {
+    function rollupUniHubSumRows(ranked, days) {
+      const byCity = new Map(ranked.map((r) => [r.city, r]));
+      const childOf = new Map();
+      for (const [parent, kids] of Object.entries(UNI_HUB_SUM_CHILDREN)) {
+        for (const kid of kids) childOf.set(kid, parent);
+      }
+      const parents = [];
+      const used = new Set();
+      for (const row of ranked) {
+        if (childOf.has(row.city)) continue;
+        const kids = UNI_HUB_SUM_CHILDREN[row.city] || [];
+        const childRows = kids
+          .map((code) => byCity.get(code))
+          .filter((r) => r && r.total > 0);
+        for (const kid of kids) used.add(kid);
+        if (!childRows.length) {
+          parents.push({ ...row, children: [] });
+          continue;
+        }
+        const daily = days.map((day, i) => {
+          let sum = Number(row.daily[i] || 0);
+          for (const child of childRows) sum += Number(child.daily[i] || 0);
+          return sum;
+        });
+        parents.push({
+          city: row.city,
+          daily,
+          total: daily.reduce((s, n) => s + n, 0),
+          children: childRows,
+        });
+        used.add(row.city);
+      }
+      // Orphan parents that only exist via children (no residual ATL row).
+      for (const [parent, kids] of Object.entries(UNI_HUB_SUM_CHILDREN)) {
+        if (used.has(parent) || byCity.has(parent)) continue;
+        const childRows = kids.map((code) => byCity.get(code)).filter((r) => r && r.total > 0);
+        if (!childRows.length) continue;
+        const daily = days.map((_, i) => childRows.reduce((s, c) => s + Number(c.daily[i] || 0), 0));
+        parents.push({
+          city: parent,
+          daily,
+          total: daily.reduce((s, n) => s + n, 0),
+          children: childRows,
+        });
+        for (const kid of kids) used.add(kid);
+      }
+      for (const row of ranked) {
+        if (used.has(row.city) || childOf.has(row.city)) continue;
+        parents.push({ ...row, children: [] });
+      }
+      return parents.sort((a, b) => b.total - a.total || a.city.localeCompare(b.city));
+    }
+
+    function citySumTableHtml(title, ranked, days, { nestChildren = false } = {}) {
+      const rows = nestChildren ? rollupUniHubSumRows(ranked, days) : ranked.map((r) => ({ ...r, children: [] }));
+      if (!rows.length) {
         return `<h3 style="margin:1rem 0 0.45rem;font-size:0.95rem">${esc(title)}</h3>
           <p class="caption">No rows.</p>`;
       }
       const headDays = days.map((day) => `<th class="num">${esc(ymdToMd(day))}</th>`).join("");
-      const body = ranked.map((row, i) => {
+      const body = rows.map((row, i) => {
         const cells = row.daily.map((n) => {
           const cls = ["num", n ? "" : "zero"].filter(Boolean).join(" ");
           return `<td class="${cls}">${fmt(n)}</td>`;
         }).join("");
+        const hasKids = nestChildren && row.children && row.children.length;
+        const label = hasKids
+          ? `<span class="chute-label"><span>${esc(row.city)}</span>
+              <button type="button" class="chute-toggle city-sum-toggle" data-city-sum="${esc(row.city)}" aria-expanded="false" aria-label="Show ${esc(row.city)} parts"></button>
+            </span>`
+          : esc(row.city);
+        const childRows = (row.children || []).map((child) => {
+          const childCells = child.daily.map((n) => {
+            const cls = ["num", n ? "" : "zero"].filter(Boolean).join(" ");
+            return `<td class="${cls}">${fmt(n)}</td>`;
+          }).join("");
+          return `<tr class="city-sum-child" data-parent-city="${esc(row.city)}">
+            <td class="num"></td>
+            <th>${esc(child.city)}</th>
+            <td class="num total">${fmt(child.total)}</td>
+            ${childCells}
+          </tr>`;
+        }).join("");
         return `<tr>
           <td class="num">${i + 1}</td>
-          <th>${esc(row.city)}</th>
+          <th>${label}</th>
           <td class="num total">${fmt(row.total)}</td>
           ${cells}
-        </tr>`;
+        </tr>${childRows}`;
       }).join("");
       return `
         <h3 style="margin:1rem 0 0.45rem;font-size:0.95rem">${esc(title)}</h3>
@@ -2681,7 +2777,7 @@
         host.innerHTML = `<p class="caption">No A+C city volume in the past 7 completed ops days.</p>`;
         return;
       }
-      host.innerHTML = `${citySumTableHtml("Uni hub", uni, days)}${citySumTableHtml("Other", other, days)}`;
+      host.innerHTML = `${citySumTableHtml("Uni hub", uni, days, { nestChildren: true })}${citySumTableHtml("Other", other, days)}`;
     }
 
     async function loadBundleBoard() {
@@ -2757,6 +2853,15 @@
     });
     $("bundle-reload").addEventListener("click", () => {
       loadBundleBoard().catch((e) => showError("bundle-error", e));
+    });
+    $("bundle-city-sum").addEventListener("click", (event) => {
+      const button = event.target.closest(".city-sum-toggle");
+      if (!button) return;
+      const expanded = button.getAttribute("aria-expanded") !== "true";
+      button.setAttribute("aria-expanded", expanded ? "true" : "false");
+      $("bundle-city-sum").querySelectorAll(`tr.city-sum-child[data-parent-city="${button.dataset.citySum}"]`).forEach((row) => {
+        row.classList.toggle("open", expanded);
+      });
     });
     $("bundle-section").addEventListener("toggle", (event) => {
       const band = event.target;
