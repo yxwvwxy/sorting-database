@@ -712,7 +712,7 @@
       <p class="caption">Last 24 hours, by when the bundle was created, not by ops day. Each bundle is counted once at its latest status. Uni hub rows follow the destination warehouse. EWR one route and multiple routes follow the area.</p>
       <div id="bundle-body"></div>
       <h2 style="margin-top:1.35rem">Past 7 days city volume (A+C)</h2>
-      <p class="caption">Stored finals for the last 7 completed ops days (current ops day excluded until 4:30pm ET). Excludes B. Newest day on the left. Uni hub and other cities are listed separately.</p>
+      <p class="caption">Stored finals for the last 7 completed ops days (current ops day excluded until 4:30pm ET). Excludes B. Newest day on the left. Uni hub and other cities are listed separately. Uni hub region totals include their hub-city breakdowns.</p>
       <div id="bundle-city-sum"></div>
     </section>
 
@@ -2713,7 +2713,7 @@
       return parents.sort((a, b) => b.total - a.total || a.city.localeCompare(b.city));
     }
 
-    function citySumTableHtml(title, ranked, days, { nestChildren = false } = {}) {
+    function citySumTableHtml(title, ranked, days, { nestChildren = false, nameCol = "City", note = "" } = {}) {
       const rows = nestChildren ? rollupUniHubSumRows(ranked, days) : ranked.map((r) => ({ ...r, children: [] }));
       if (!rows.length) {
         return `<h3 style="margin:1rem 0 0.45rem;font-size:0.95rem">${esc(title)}</h3>
@@ -2728,7 +2728,7 @@
         const hasKids = nestChildren && row.children && row.children.length;
         const label = hasKids
           ? `<span class="chute-label"><span>${esc(row.city)}</span>
-              <button type="button" class="chute-toggle city-sum-toggle" data-city-sum="${esc(row.city)}" aria-expanded="false" aria-label="Show ${esc(row.city)} parts"></button>
+              <button type="button" class="chute-toggle city-sum-toggle" data-city-sum="${esc(row.city)}" aria-expanded="true" aria-label="Hide ${esc(row.city)} parts"></button>
             </span>`
           : esc(row.city);
         const childRows = (row.children || []).map((child) => {
@@ -2736,7 +2736,7 @@
             const cls = ["num", n ? "" : "zero"].filter(Boolean).join(" ");
             return `<td class="${cls}">${fmt(n)}</td>`;
           }).join("");
-          return `<tr class="city-sum-child" data-parent-city="${esc(row.city)}">
+          return `<tr class="city-sum-child open" data-parent-city="${esc(row.city)}">
             <td class="num"></td>
             <th>${esc(child.city)}</th>
             <td class="num total">${fmt(child.total)}</td>
@@ -2750,14 +2750,16 @@
           ${cells}
         </tr>${childRows}`;
       }).join("");
+      const noteHtml = note ? `<p class="caption">${esc(note)}</p>` : "";
       return `
         <h3 style="margin:1rem 0 0.45rem;font-size:0.95rem">${esc(title)}</h3>
+        ${noteHtml}
         <div class="bundle-table-wrap">
           <table class="bundle-table city-sum-table">
             <thead>
               <tr>
                 <th class="num">#</th>
-                <th>City</th>
+                <th>${esc(nameCol)}</th>
                 <th class="num">7-day total</th>
                 ${headDays}
               </tr>
@@ -2777,7 +2779,11 @@
         host.innerHTML = `<p class="caption">No A+C city volume in the past 7 completed ops days.</p>`;
         return;
       }
-      host.innerHTML = `${citySumTableHtml("Uni hub", uni, days, { nestChildren: true })}${citySumTableHtml("Other", other, days)}`;
+      host.innerHTML = `${citySumTableHtml("Uni hub", uni, days, {
+        nestChildren: true,
+        nameCol: "Hub",
+        note: "Region total includes hub-city volume (e.g. ATL includes CLT).",
+      })}${citySumTableHtml("Other", other, days)}`;
     }
 
     async function loadBundleBoard() {
