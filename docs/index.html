@@ -693,7 +693,7 @@
       <div id="gofo-tiles" class="city-modules"></div>
       <div id="gofo-growth">
       <h2 style="margin-top:1.35rem">Growth chart</h2>
-      <p id="gofo-chart-caption" class="caption">Showing BWI.H-709, EWR.H-400, EWR.H-1160</p>
+      <p id="gofo-chart-caption" class="caption">Showing BWI.H-709, EWR.H-400, EWR.H-500</p>
       <div class="panel"><div id="gofo-chart"></div></div>
       </div>
       <h2 style="margin-top:1.35rem">Chute count</h2>
@@ -816,11 +816,18 @@
     const CITY_HUB_OPS_DAY = "2026-09-05";
     const SEGMENT_FROM = "2026-11-05";
     const PHYSICAL_WH_FROM = "2026-11-08";
+    // From ops day 2026-11-22 #C: PVD/AVP join 400; former 1160 bucket renamed 500.
+    const PHYSICAL_WH_500_FROM = "2026-11-22";
     const GOFO_FIRST_OPS_DAY = "2026-10-18";
-    const EWR_PHYSICAL_400 = new Set([
+    const EWR_PHYSICAL_400_OLD = new Set([
       "BOS", "MHT", "HYA", "ALB", "BUF", "ERI", "PIT", "ROC", "ORH", "LDJ", "SYR",
     ]);
-    const PHYSICAL_WH_DEFAULT = ["BWI.H-709", "EWR.H-400", "EWR.H-1160"];
+    const EWR_PHYSICAL_400 = new Set([
+      ...EWR_PHYSICAL_400_OLD,
+      "PVD", "AVP",
+    ]);
+    const PHYSICAL_WH_DEFAULT_OLD = ["BWI.H-709", "EWR.H-400", "EWR.H-1160"];
+    const PHYSICAL_WH_DEFAULT = ["BWI.H-709", "EWR.H-400", "EWR.H-500"];
 
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     const $ = (id) => document.getElementById(id);
@@ -848,6 +855,8 @@
     let gofoChartSelection = [];
     let gofoChartDefault = [];
     let gofoResortMode = false;
+    let gofoOpsDate = "";
+    let gofoBatchPhase = null;
     let gofoUniPartLatest = [];
     let gofoJfkPartLatest = [];
     let activeTab = "gofo";
@@ -2031,17 +2040,31 @@
       ];
     }
 
-    function physicalWarehouseFor(section, cityCode, opsDate) {
+    function usesPhysicalWh500Rule(opsDate, batchPhase = gofoBatchPhase) {
+      const d = String(opsDate || "");
+      if (!d || d < PHYSICAL_WH_FROM) return false;
+      if (d > PHYSICAL_WH_500_FROM) return true;
+      if (d < PHYSICAL_WH_500_FROM) return false;
+      // Same-day mid-switch on 2026-11-22: only C (#3) uses the new rule.
+      return Number(batchPhase) === 3;
+    }
+
+    function ewrPhysical400Set(opsDate, batchPhase = gofoBatchPhase) {
+      return usesPhysicalWh500Rule(opsDate, batchPhase) ? EWR_PHYSICAL_400 : EWR_PHYSICAL_400_OLD;
+    }
+
+    function physicalWarehouseFor(section, cityCode, opsDate, batchPhase = gofoBatchPhase) {
       if (section === "bwi") return "BWI.H-709";
       if (section !== "ewr_one" && section !== "ewr_multi") return null;
       if (String(opsDate || "") < PHYSICAL_WH_FROM) return "EWR.H-500";
-      return EWR_PHYSICAL_400.has(cityCode) ? "EWR.H-400" : "EWR.H-1160";
+      if (ewrPhysical400Set(opsDate, batchPhase).has(cityCode)) return "EWR.H-400";
+      return usesPhysicalWh500Rule(opsDate, batchPhase) ? "EWR.H-500" : "EWR.H-1160";
     }
 
-    function rollupPhysicalSeries(series, opsDate) {
+    function rollupPhysicalSeries(series, opsDate, batchPhase = gofoBatchPhase) {
       const byKey = new Map();
       for (const r of series) {
-        const wh = physicalWarehouseFor(r.section, r.code, opsDate);
+        const wh = physicalWarehouseFor(r.section, r.code, opsDate, batchPhase);
         if (!wh) continue;
         const key = `${r.scraped_at}|${wh}`;
         let row = byKey.get(key);
@@ -2064,9 +2087,12 @@
       return [...series, ...byKey.values()];
     }
 
-    function gofoDefaultCities(latestRows, opsDate) {
+    function gofoDefaultCities(latestRows, opsDate, batchPhase = gofoBatchPhase) {
       if (String(opsDate || "") >= PHYSICAL_WH_FROM) {
-        return PHYSICAL_WH_DEFAULT
+        const defaults = usesPhysicalWh500Rule(opsDate, batchPhase)
+          ? PHYSICAL_WH_DEFAULT
+          : PHYSICAL_WH_DEFAULT_OLD;
+        return defaults
           .map((code) => latestRows.find((r) => r.section === "physical" && r.code === code))
           .filter(Boolean)
           .map((r) => r.city);
@@ -2164,12 +2190,16 @@
     }
 
     function renderEwrPhysicalGrids(rows, tileFn) {
+      const set400 = ewrPhysical400Set(gofoOpsDate, gofoBatchPhase);
+      const otherLabel = usesPhysicalWh500Rule(gofoOpsDate, gofoBatchPhase)
+        ? "EWR.H-500"
+        : "EWR.H-1160";
       const groups = [
         { label: "EWR.H-400", rows: [] },
-        { label: "EWR.H-1160", rows: [] },
+        { label: otherLabel, rows: [] },
       ];
       for (const r of rows) {
-        (EWR_PHYSICAL_400.has(r.code) ? groups[0] : groups[1]).rows.push(r);
+        (set400.has(r.code) ? groups[0] : groups[1]).rows.push(r);
       }
       return groups
         .filter((g) => g.rows.length)
@@ -2434,7 +2464,9 @@
       showError("gofo-error", null);
       const batch = gofoBatches[Number($("gofo-batch").value)];
       if (!batch || String(batch.subbatch_date || "") < GOFO_FIRST_OPS_DAY) return;
-      gofoResortMode = String(batch.subbatch_date || "") >= SEGMENT_FROM && Number(batch.batch_phase) === 2;
+      gofoOpsDate = String(batch.subbatch_date || "");
+      gofoBatchPhase = batch.batch_phase == null ? null : Number(batch.batch_phase);
+      gofoResortMode = gofoOpsDate >= SEGMENT_FROM && gofoBatchPhase === 2;
       setGofoGrowthVisible(!gofoResortMode);
       renderMeta(batch, "gofo-meta");
       if (gofoResortMode) {
@@ -2489,13 +2521,21 @@
       gofoJfkPartLatest = latestRaw.filter((r) => r.section === "jfk_pwm" && r.code !== "PWM");
       series = rollupPhysicalSeries(
         rollupJfkSeries(rollupGofoSeries(series)),
-        batch.subbatch_date
+        batch.subbatch_date,
+        batch.batch_phase
       );
       const latest = series.filter((r) => r.scraped_at === latestTs);
       const cities = [...new Set(series.map((r) => r.city))].sort((a, b) => a.localeCompare(b));
       gofoChartModel = { series, cities };
-      gofoChartDefault = gofoDefaultCities(latest, batch.subbatch_date);
+      gofoChartDefault = gofoDefaultCities(latest, batch.subbatch_date, batch.batch_phase);
       gofoChartSelection = gofoChartDefault.slice();
+      const chartDefaults = usesPhysicalWh500Rule(batch.subbatch_date, batch.batch_phase)
+        ? PHYSICAL_WH_DEFAULT
+        : PHYSICAL_WH_DEFAULT_OLD;
+      const caption = $("gofo-chart-caption");
+      if (caption && String(batch.subbatch_date || "") >= PHYSICAL_WH_FROM) {
+        caption.textContent = `Showing ${chartDefaults.join(", ")}`;
+      }
       renderGofoTiles(latest.filter((r) => r.section !== "physical"), mixed);
       applyGofoChart();
     }
