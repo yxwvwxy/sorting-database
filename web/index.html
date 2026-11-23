@@ -489,15 +489,22 @@
       font-weight: 500;
     }
     .bundle-table.status-board td.zero { color: var(--muted); }
+    .bundle-table.pull-board {
+      width: auto;
+      table-layout: auto;
+    }
+    .bundle-table.pull-board th,
+    .bundle-table.pull-board td {
+      text-align: left;
+      padding: 0.38rem 0.85rem 0.38rem 0;
+    }
     .bundle-table.pull-board thead th { color: var(--ink); }
     .bundle-table.pull-board tbody th {
-      text-align: left;
       color: var(--mint);
       font-weight: 500;
       font-variant-numeric: tabular-nums;
     }
     .bundle-table.pull-board td {
-      text-align: right;
       font-variant-numeric: tabular-nums;
     }
     .city-sum-table th.num,
