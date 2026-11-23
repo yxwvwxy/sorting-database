@@ -489,6 +489,17 @@
       font-weight: 500;
     }
     .bundle-table.status-board td.zero { color: var(--muted); }
+    .bundle-table.pull-board thead th { color: var(--ink); }
+    .bundle-table.pull-board tbody th {
+      text-align: left;
+      color: var(--mint);
+      font-weight: 500;
+      font-variant-numeric: tabular-nums;
+    }
+    .bundle-table.pull-board td {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
     .city-sum-table th.num,
     .city-sum-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
     .city-sum-table thead th { color: var(--ink); }
@@ -671,6 +682,7 @@
 
     <nav id="app-tabs" class="app-tabs hidden" aria-label="Dashboard sections">
       <button type="button" class="app-tab" data-tab="gofo" id="tab-gofo">City Growth</button>
+      <button type="button" class="app-tab" data-tab="pull" id="tab-pull">Pull</button>
       <button type="button" class="app-tab" data-tab="bundle" id="tab-bundle">Bundle &amp; Sum</button>
       <button type="button" class="app-tab" data-tab="feed" id="tab-feed">Feed &amp; Hourly</button>
       <button type="button" class="app-tab" data-tab="city" id="tab-city">City / hub</button>
@@ -698,6 +710,22 @@
       </div>
       <h2 style="margin-top:1.35rem">Chute count</h2>
       <div id="gofo-chute-counts"></div>
+    </section>
+
+    <section id="pull-section" class="section hidden">
+      <h2>Pull</h2>
+      <div class="controls">
+        <label>Batch / ops day
+          <select id="pull-batch"></select>
+        </label>
+        <label>&nbsp;
+          <button id="pull-reload" type="button">Refresh</button>
+        </label>
+      </div>
+      <div id="pull-meta" class="meta"></div>
+      <p id="pull-error" class="error hidden"></p>
+      <p class="caption">Configured chutes with volume 1–99 on the latest scrape of this batch. JFK excluded.</p>
+      <div id="pull-body"></div>
     </section>
 
     <section id="bundle-section" class="section hidden">
@@ -843,6 +871,7 @@
     let batches = [];
     let feedBatches = [];
     let gofoBatches = [];
+    let pullBatches = [];
     let feedLayers = []; // per-station hourly totals
     let feedHourTabs = []; // :30 hour buckets
     let feedLatest = [];
@@ -897,7 +926,7 @@
 
     function visibleTabs() {
       const tabs = [];
-      if (hasRole("city") || hasRole("feed")) tabs.push("gofo", "bundle");
+      if (hasRole("city") || hasRole("feed")) tabs.push("gofo", "pull", "bundle");
       if (hasRole("feed")) tabs.push("feed");
       if (hasRole("city")) tabs.push("city");
       return tabs;
@@ -927,12 +956,13 @@
       activeTab = tab;
 
       $("gofo-section").classList.toggle("hidden", tab !== "gofo");
+      $("pull-section").classList.toggle("hidden", tab !== "pull");
       $("bundle-section").classList.toggle("hidden", tab !== "bundle");
       $("feed-section").classList.toggle("hidden", tab !== "feed");
       $("city-section").classList.toggle("hidden", tab !== "city");
       $("app-tabs").classList.toggle("hidden", tabs.length < 2);
 
-      for (const name of ["gofo", "bundle", "feed", "city"]) {
+      for (const name of ["gofo", "pull", "bundle", "feed", "city"]) {
         const btn = $(`tab-${name}`);
         if (!btn) continue;
         btn.classList.toggle("hidden", !tabs.includes(name));
@@ -1329,6 +1359,7 @@
       if (!tabs.length) {
         $("app-tabs").classList.add("hidden");
         $("gofo-section").classList.add("hidden");
+        if ($("pull-section")) $("pull-section").classList.add("hidden");
         $("bundle-section").classList.add("hidden");
         $("city-section").classList.add("hidden");
         $("feed-section").classList.add("hidden");
@@ -2822,6 +2853,62 @@
       })}${citySumTableHtml("Other", other, days)}`;
     }
 
+    function physicalChuteKey(chuteId) {
+      const id = Number(chuteId);
+      if (id >= 10000 && id % 100 === 1) return [Math.floor(id / 100), id];
+      return [id, id];
+    }
+
+    function renderPullList(rows) {
+      const host = $("pull-body");
+      if (!host) return;
+      const pulls = (rows || []).filter((row) => row.chute_id != null);
+      if (!pulls.length) {
+        host.innerHTML = `<p class="caption">None.</p>`;
+        return;
+      }
+      pulls.sort((a, b) => {
+        const [ap, ai] = physicalChuteKey(a.chute_id);
+        const [bp, bi] = physicalChuteKey(b.chute_id);
+        return ap - bp || ai - bi;
+      });
+      const body = pulls.map((row) => `
+        <tr>
+          <th>${esc(row.chute_id)}</th>
+          <td>${fmt(row.volume)}</td>
+        </tr>`).join("");
+      host.innerHTML = `
+        <p class="caption">${fmt(pulls.length)} chutes</p>
+        <div class="bundle-table-wrap">
+          <table class="bundle-table pull-board">
+            <thead><tr><th>Chute</th><th>Volume</th></tr></thead>
+            <tbody>${body}</tbody>
+          </table>
+        </div>`;
+    }
+
+    async function loadPullBatches() {
+      const cutoff = etDaysAgoYmd(6);
+      const all = await rpc("list_scrape_batches", { p_limit: 100 });
+      pullBatches = all.filter((b) => String(b.subbatch_date || "") >= cutoff);
+      $("pull-batch").innerHTML = pullBatches.map((b, i) => {
+        const label = batchOptionLabel(b);
+        return `<option value="${i}">${label}</option>`;
+      }).join("");
+    }
+
+    async function loadPullList() {
+      showError("pull-error", null);
+      const batch = pullBatches[Number($("pull-batch").value)];
+      if (!batch) {
+        renderPullList([]);
+        return;
+      }
+      renderMeta(batch, "pull-meta");
+      const rows = await rpc("barrel_pull_list", { p_subbatch: batch.subbatch });
+      renderPullList(rows || []);
+    }
+
     async function loadBundleBoard() {
       showError("bundle-error", null);
       const boardP = rpc("bundle_board", { p_operation_date: etDaysAgoYmd(0) })
@@ -2839,6 +2926,9 @@
       const tasks = [];
       if (visibleTabs().includes("gofo")) {
         tasks.push(loadGofoBatches().then(loadGofoSeries).catch((err) => showError("gofo-error", err)));
+      }
+      if (visibleTabs().includes("pull")) {
+        tasks.push(loadPullBatches().then(loadPullList).catch((err) => showError("pull-error", err)));
       }
       if (visibleTabs().includes("bundle")) {
         tasks.push(loadBundleBoard().catch((err) => showError("bundle-error", err)));
@@ -2892,6 +2982,12 @@
     });
     $("gofo-reload").addEventListener("click", () => {
       loadGofoBatches().then(loadGofoSeries).catch((e) => showError("gofo-error", e));
+    });
+    $("pull-batch").addEventListener("change", () => {
+      loadPullList().catch((e) => showError("pull-error", e));
+    });
+    $("pull-reload").addEventListener("click", () => {
+      loadPullBatches().then(loadPullList).catch((e) => showError("pull-error", e));
     });
     $("bundle-reload").addEventListener("click", () => {
       loadBundleBoard().catch((e) => showError("bundle-error", e));
@@ -2980,6 +3076,7 @@
         batches = [];
         feedBatches = [];
         gofoBatches = [];
+        pullBatches = [];
         cityChartModel = { series: [], cities: [] };
         cityChartSelection = CITY_CHART_DEFAULT.slice();
         gofoChartModel = { series: [], cities: [] };
@@ -2993,6 +3090,8 @@
         $("tiles").innerHTML = "";
         $("gofo-tiles").innerHTML = "";
         $("gofo-chute-counts").innerHTML = "";
+        if ($("pull-body")) $("pull-body").innerHTML = "";
+        if ($("pull-meta")) $("pull-meta").innerHTML = "";
         $("bundle-body").innerHTML = "";
         $("bundle-meta").innerHTML = "";
         if ($("bundle-city-sum")) $("bundle-city-sum").innerHTML = "";
