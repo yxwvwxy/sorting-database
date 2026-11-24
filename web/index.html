@@ -850,6 +850,8 @@
     const CITY_CHART_DEFAULT = ["EWR", "CT", "AT"];
     const CITY_HUB_OPS_DAY = "2026-09-05";
     const SEGMENT_FROM = "2026-11-05";
+    // Inclusive: last ops day with A/B/C labels and mid-ops B/C Slot watches.
+    const SEGMENT_UNTIL = "2026-11-22";
     const PHYSICAL_WH_FROM = "2026-11-08";
     // From ops day 2026-11-22 #C: PVD/AVP join 400; former 1160 bucket renamed 500.
     const PHYSICAL_WH_500_FROM = "2026-11-22";
@@ -869,7 +871,9 @@
     const fmt = (n) => Number(n || 0).toLocaleString("en-US");
     const batchOptionLabel = (b) => {
       const PHASE = { 1: "A", 2: "B", 3: "C" };
-      const segmented = String(b.subbatch_date || "") >= SEGMENT_FROM && PHASE[b.batch_phase];
+      const day = String(b.subbatch_date || "");
+      const segmented =
+        day >= SEGMENT_FROM && day <= SEGMENT_UNTIL && PHASE[b.batch_phase];
       const phase = segmented ? ` · #${PHASE[b.batch_phase]}` : "";
       return `${b.subbatch_date}${phase} · ${b.subbatch} · ${b.scrape_count} snaps · ${fmt(b.latest_total)}`;
     };
@@ -1081,7 +1085,11 @@
     async function updateGofoBEstimate(opsDay, aSeriesMaybe) {
       const el = $("gofo-b-estimate");
       if (!el) return;
-      if (!opsDay || String(opsDay) < SEGMENT_FROM) {
+      if (
+        !opsDay
+        || String(opsDay) < SEGMENT_FROM
+        || String(opsDay) > SEGMENT_UNTIL
+      ) {
         el.classList.add("hidden");
         el.textContent = "";
         el.innerHTML = "";
@@ -2504,7 +2512,10 @@
       if (!batch || String(batch.subbatch_date || "") < GOFO_FIRST_OPS_DAY) return;
       gofoOpsDate = String(batch.subbatch_date || "");
       gofoBatchPhase = batch.batch_phase == null ? null : Number(batch.batch_phase);
-      gofoResortMode = gofoOpsDate >= SEGMENT_FROM && gofoBatchPhase === 2;
+      gofoResortMode =
+        gofoOpsDate >= SEGMENT_FROM
+        && gofoOpsDate <= SEGMENT_UNTIL
+        && gofoBatchPhase === 2;
       setGofoGrowthVisible(!gofoResortMode);
       renderMeta(batch, "gofo-meta");
       if (gofoResortMode) {

@@ -131,12 +131,12 @@ class SubbatchJob:
 def plan_kind_for_phase(phase: int | None) -> str | None:
     if phase == 2:
         return "resort_by_route"
-    if phase in (1, 3):
+    if phase in (1, 3) or phase is None:
         return "regular"
     return None
 
 
-def job_with_phase(job: SubbatchJob, phase: int) -> SubbatchJob:
+def job_with_phase(job: SubbatchJob, phase: int | None) -> SubbatchJob:
     return SubbatchJob(
         operation_date=job.operation_date,
         subbatch=job.subbatch,

@@ -2,25 +2,13 @@
 
 Agreed ops rules (America/New_York):
 
-- Each ops day uses three segments: A, B, C (batch_phase 1, 2, 3).
-  - A opens at the ops-day switch (16:30 ET from 2026-11-08 / ops day 11/9; was 19:30).
-  - From 23:10, every scrape opens Slot Assignment until Batch No leaves
-    A. If unchanged, keep scraping A. When it changes, that run scrapes A
-    one last time and B for the first time; then stop Slot checks until
-    the morning watch.
-  - From 06:10, every scrape opens Slot until Batch No leaves B. If
-    unchanged, keep scraping B. When it changes, that run scrapes B one
-    last time and C for the first time; then stop Slot checks until the
-    next ops-day open. C's last scrape is 16:10 (closing slot).
-- A and C use the regular chute plan. B is the only segment that uses
-  the secondary-split plan `二次分拣模版1105` (EWR.H by_route; re-sorts
-  EWR.H multi-route volume from this ops day's A plus the prior ops day's C).
-  That plan starts at the first stored B scrape of ops day 2026-11-05
-  (03:10:14 ET) and is kept in chute_destination_resort, not the regular map.
-  Dashboard still follows the regular plan for now; B volumes are scraped
-  under their Batch No. From the first stored C scrape of ops day 2026-11-05
-  (09:10:16 ET) the regular plan is `第一次分拣模版1103`; until that capture,
-  regular remains `458-config`.
+- Ops days 2026-11-05 through 2026-11-22 use three segments A/B/C
+  (batch_phase 1/2/3). A opens at the ops-day switch. From 23:10 every
+  scrape watches Slot for B; from 06:10 watches for C. A and C use the
+  regular chute plan; B uses the secondary-split plan.
+- From ops day 2026-11-23 onward: one Batch No per ops day again. No A/B/C
+  labels, no midnight/morning Slot watches. Still 16:10 last scrape of the
+  old day / 16:30 open of the new day (from ops day 2026-11-09).
 - Closing slot (16:00-16:29 from 2026-11-08 / ops day 11/9; was 19:00-19:29):
   never open Slot Assignment; use the saved batch. On an early-switch date
   that closing slot is one hour earlier.
@@ -59,6 +47,10 @@ BATCH2_WATCH_MINUTE = 10
 BATCH3_WATCH_HOUR = 6
 BATCH3_WATCH_MINUTE = 10
 
+# Inclusive range that used A/B/C mid-ops Slot watches.
+THREE_PHASE_FIRST_OPS_DAY = date(2026, 11, 5)
+THREE_PHASE_LAST_OPS_DAY = date(2026, 11, 22)
+
 EVENING_CONFIRMED_SOURCES = frozenset(
     {
         "slot_assignment",
@@ -68,6 +60,21 @@ EVENING_CONFIRMED_SOURCES = frozenset(
         "slot_assignment_batch3",
     }
 )
+
+
+def uses_three_phase(ops_day: date | None) -> bool:
+    """True for ops days that had A/B/C segments and mid-ops Slot watches."""
+    return (
+        ops_day is not None
+        and THREE_PHASE_FIRST_OPS_DAY <= ops_day <= THREE_PHASE_LAST_OPS_DAY
+    )
+
+
+def phase_for_ops_day(ops_day: date, phase_if_three: int = 1) -> int | None:
+    """Store batch_phase only while three-segment mode is active."""
+    if uses_three_phase(ops_day):
+        return phase_if_three
+    return None
 
 
 @dataclass(frozen=True)
@@ -146,24 +153,27 @@ def should_poll_slot_assignment(
         return True
 
     phase = state.phase if state else 1
+    ops_for_watch = state.job.operation_date if state else window_ops
 
-    # 23:10 onward while still on batch 1: watch for batch 2.
-    if (
-        state
-        and window_batch1_confirmed(state, window_ops)
-        and phase == 1
-        and in_batch2_watch_window(current)
-    ):
-        return True
+    # Mid-ops B/C watches only during the three-segment era.
+    if uses_three_phase(ops_for_watch):
+        # 23:10 onward while still on batch 1: watch for batch 2.
+        if (
+            state
+            and window_batch1_confirmed(state, window_ops)
+            and phase == 1
+            and in_batch2_watch_window(current)
+        ):
+            return True
 
-    # 06:10 onward while still on batch 2: watch for batch 3.
-    if (
-        state
-        and window_batch1_confirmed(state, window_ops)
-        and phase == 2
-        and in_batch3_watch_window(current)
-    ):
-        return True
+        # 06:10 onward while still on batch 2: watch for batch 3.
+        if (
+            state
+            and window_batch1_confirmed(state, window_ops)
+            and phase == 2
+            and in_batch3_watch_window(current)
+        ):
+            return True
 
     # Already confirmed for this window and not in a watch window.
     if window_batch1_confirmed(state, window_ops):
@@ -228,15 +238,18 @@ def resolve_job(
         )
 
     if state:
+        saved_phase = phase_for_ops_day(state.job.operation_date, state.phase)
         print(
             f"Using saved batch: {state.job.subbatch} "
-            f"(operation date {state.job.operation_date}, phase {state.phase})"
+            f"(operation date {state.job.operation_date}"
+            f"{f', phase {saved_phase}' if saved_phase is not None else ''})"
         )
-        return ResolveResult(jobs=(job_with_phase(state.job, state.phase),))
+        return ResolveResult(jobs=(job_with_phase(state.job, saved_phase),))
 
+    fallback_clock = current_subbatch_job(now=now, machine_id=machine_id)
     fallback = job_with_phase(
-        current_subbatch_job(now=now, machine_id=machine_id),
-        1,
+        fallback_clock,
+        phase_for_ops_day(fallback_clock.operation_date, 1),
     )
     save_batch_state(fallback, source="clock_bootstrap", phase=1)
     print(
@@ -280,12 +293,19 @@ def _resolve_from_slot_assignment(
 
     # Forced mid-day refresh: page Batch No is the batch in use right now.
     if adopt_page_batch:
-        keep_phase = phase if previous_ops == window_ops_now else 1
+        ops = (
+            previous_ops
+            if previous_ops == window_ops_now
+            else operation_date_from_subbatch(page_batch)
+        )
+        keep_phase = phase_for_ops_day(
+            ops,
+            phase if previous_ops == window_ops_now else 1,
+        )
+        state_phase = keep_phase if keep_phase is not None else 1
         job = job_with_phase(
             SubbatchJob(
-                operation_date=previous_ops
-                if previous_ops == window_ops_now
-                else operation_date_from_subbatch(page_batch),
+                operation_date=ops,
                 subbatch=page_batch,
                 machine_id=machine_id,
             ),
@@ -296,20 +316,23 @@ def _resolve_from_slot_assignment(
             source="slot_assignment_refresh",
             awaiting_from=None,
             window_operation_date=None,
-            phase=keep_phase,
+            phase=state_phase,
         )
         print(
             f"Refreshed current batch from Slot Assignment: {job.subbatch} "
-            f"(operation date {job.operation_date}, phase {keep_phase})"
+            f"(operation date {job.operation_date}"
+            f"{f', phase {keep_phase}' if keep_phase is not None else ''})"
         )
         return ResolveResult(jobs=(job,))
 
     # Mid-ops watches: phase 1 from 23:10 (→ batch 2), phase 2 from 06:10 (→ batch 3).
+    # Only during the three-segment era (ops days 2026-11-05 .. 2026-11-22).
     if (
         state
         and previous
         and not awaiting_from
         and window_batch1_confirmed(state, window_ops_now)
+        and uses_three_phase(previous_ops)
         and phase in (1, 2)
     ):
         watching_batch2 = phase == 1 and in_batch2_watch_window(now)
@@ -380,15 +403,16 @@ def _resolve_from_slot_assignment(
             f"waiting for Batch No to change from {awaiting_from}."
         )
 
-    # Evening open switched: page value is batch 1 for the new ops day.
+    # Evening open switched: page value is the new ops day's batch.
     if awaiting_from and page_batch != awaiting_from:
+        new_phase = phase_for_ops_day(window_ops_now, 1)
         job = job_with_phase(
             SubbatchJob(
                 operation_date=window_ops_now,
                 subbatch=page_batch,
                 machine_id=machine_id,
             ),
-            1,
+            new_phase,
         )
         save_batch_state(
             job,
@@ -397,20 +421,31 @@ def _resolve_from_slot_assignment(
             window_operation_date=None,
             phase=1,
         )
+        next_watch = (
+            " Next Slot watch for batch 2 starts at 23:10 ET."
+            if uses_three_phase(window_ops_now)
+            else ""
+        )
         print(
             f"Batch switched: {awaiting_from} -> {page_batch} "
-            f"(operation date {job.operation_date}, phase 1). "
-            "Next Slot watch for batch 2 starts at 23:10 ET."
+            f"(operation date {job.operation_date}"
+            f"{f', phase {new_phase}' if new_phase is not None else ''})."
+            f"{next_watch}"
         )
         return ResolveResult(jobs=(job,))
 
     # Still old on the page: scrape old batch; check again next run.
     if awaiting_from and page_batch == awaiting_from:
+        closing_ops = previous_ops or page_job.operation_date
         # Keep the prior ops-day phase on the closing batch (do not force #1).
-        keep_phase = phase if phase in (1, 2, 3) else 3
+        if uses_three_phase(closing_ops):
+            keep_phase = phase if phase in (1, 2, 3) else 3
+        else:
+            keep_phase = None
+        state_phase = keep_phase if keep_phase is not None else 1
         job = job_with_phase(
             SubbatchJob(
-                operation_date=previous_ops or page_job.operation_date,
+                operation_date=closing_ops,
                 subbatch=page_batch,
                 machine_id=machine_id,
             ),
@@ -421,7 +456,7 @@ def _resolve_from_slot_assignment(
             source="slot_assignment_waiting",
             awaiting_from=awaiting_from,
             window_operation_date=window_ops,
-            phase=keep_phase,
+            phase=state_phase,
         )
         print(
             f"Slot Assignment still shows {page_batch}; "
@@ -430,19 +465,26 @@ def _resolve_from_slot_assignment(
         )
         return ResolveResult(jobs=(job,))
 
-    # No prior saved batch: adopt page value for this window as phase 1.
+    # No prior saved batch: adopt page value for this window.
+    new_phase = phase_for_ops_day(window_ops_now, 1)
     job = job_with_phase(
         SubbatchJob(
             operation_date=window_ops_now,
             subbatch=page_batch,
             machine_id=machine_id,
         ),
-        1,
+        new_phase,
     )
     save_batch_state(job, source="slot_assignment", phase=1)
+    next_watch = (
+        " Next Slot watch for batch 2 starts at 23:10 ET."
+        if uses_three_phase(window_ops_now)
+        else ""
+    )
     print(
         f"Loaded batch from Slot Assignment: {job.subbatch} "
-        f"(operation date {job.operation_date}, phase 1). "
-        "Next Slot watch for batch 2 starts at 23:10 ET."
+        f"(operation date {job.operation_date}"
+        f"{f', phase {new_phase}' if new_phase is not None else ''})."
+        f"{next_watch}"
     )
     return ResolveResult(jobs=(job,))
